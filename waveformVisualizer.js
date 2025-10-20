@@ -212,7 +212,7 @@ class WaveformVisualizer {
         // --- Optionally: create multisampled texture for antialiasing ---
         this.#displayTextureMSAA = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
-            sampleCount: 4,
+            sampleCount: 1, // make it 4 for multisampling
             format: this.#canvasFormat,
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
@@ -336,7 +336,7 @@ class WaveformVisualizer {
                     }],
                 },
                 primitive: {topology: "line-strip"},
-                multisample: {count: 4},
+                multisample: {count: 1}, // make it 4 for multisampling
             });
         }
     }
@@ -357,8 +357,11 @@ class WaveformVisualizer {
             // --- Pass 1: Render Pass ---
             const renderPass = encoder.beginRenderPass({
                 colorAttachments: [{
-                    view: this.#displayTextureMSAA.createView(),
-                    resolveTarget: this.#context.getCurrentTexture().createView(),
+                    // For multisampling use these lines
+                    // view: this.#displayTextureMSAA.createView(),
+                    // resolveTarget: this.#context.getCurrentTexture().createView(),
+
+                    view: this.#context.getCurrentTexture().createView(),
                     loadOp: 'clear',
                     storeOp: 'store',
                     clearValue: {r: 0, g: 0, b: 0, a: 0},
