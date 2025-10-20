@@ -182,7 +182,7 @@ class WaveformVisualizer {
     }
 
     /**
-     * (Re)creates textures, depth buffers, and updates bind groups on resize or format change.
+     * (Re)creates textures and updates bind groups on resize or format change.
      * @private
      */
     #resizeTextures() {
