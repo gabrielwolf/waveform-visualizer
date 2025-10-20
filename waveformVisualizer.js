@@ -55,10 +55,6 @@ class WaveformVisualizer {
     /** @type {number | null} */
     #smoothingFactor;
 
-    /** @type {GPUBindGroup | null} */
-    #waveformBindGroup;
-    /** @type {GPUBindGroupLayout | null} */
-    #waveformBindGroupLayout;
     #waveformData;
     #waveformBuffer;
 
@@ -235,9 +231,8 @@ class WaveformVisualizer {
             ],
         });
 
-        // Create pipeline layout using uniform and energy bind group layouts (waveformBindGroupLayout added later)
-        // We'll patch pipeline layout after waveformBindGroupLayout is created in #setupBindGroups
-        this.#pipelineLayout = null; // Will be set after bind group layouts created
+        // Create pipeline layout using uniform bind group layouts. We'll patch pipeline in #setupBindGroups
+        this.#pipelineLayout = null;
 
         // vertex buffer: float32x3
         this.#shaderWaveformVisualizerModule = shaderWaveformVisualizerModule;
@@ -248,15 +243,6 @@ class WaveformVisualizer {
      */
     #setupBindGroups() {
         if (!this.#uniformBuffer || !this.#uniformBindGroupLayout) return;
-
-        // Waveform bind group layout: energies, directions, LUT, sampler, params
-        this.#waveformBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
-            entries: [],
-        });
-        this.#waveformBindGroup = this.#gpuDevice.createBindGroup({
-            layout: this.#waveformBindGroupLayout,
-            entries: [],
-        });
 
         // Uniform bind group
         this.#uniformBindGroup = this.#gpuDevice.createBindGroup({
@@ -285,7 +271,7 @@ class WaveformVisualizer {
         // Now create pipeline layout and pipeline if not already created
         if (!this.#pipeline) {
             this.#pipelineLayout = this.#gpuDevice.createPipelineLayout({
-                bindGroupLayouts: [this.#uniformBindGroupLayout, this.#waveformBindGroupLayout],
+                bindGroupLayouts: [this.#uniformBindGroupLayout]
             });
             // Main mesh pipeline
             this.#pipeline = this.#gpuDevice.createRenderPipeline({
@@ -361,7 +347,6 @@ class WaveformVisualizer {
             // Draw head mesh
             renderPass.setPipeline(this.#pipeline);
             renderPass.setBindGroup(0, this.#uniformBindGroup);
-            renderPass.setBindGroup(1, this.#waveformBindGroup);
             renderPass.setVertexBuffer(0, this.#waveformBuffer);
             renderPass.draw(this.#waveformData.length / 2, 1, 0, 0);
 
