@@ -70,9 +70,6 @@ class WaveformVisualizer {
     /** @type {GPUBindGroupLayout | null} */
     #waveformBindGroupLayout;
 
-    /** @type {Array<GPUVertexBufferLayout>} Array of vertex buffer layouts for the render pipeline. */
-    #vertexBufferLayouts;
-
     /**
      * Initializes the singleton instance of WaveformVisualizer with the provided canvas and event bus.
      * If already initialized, returns the existing instance.
@@ -175,7 +172,7 @@ class WaveformVisualizer {
     }
 
     /**
-     * (Re)creates textures, and updates bind groups on resize or format change.
+     * (Re)creates textures, depth buffers, and updates bind groups on resize or format change.
      * @private
      */
     #resizeTextures() {
@@ -237,8 +234,7 @@ class WaveformVisualizer {
         // We'll patch pipeline layout after waveformBindGroupLayout is created in #setupBindGroups
         this.#pipelineLayout = null; // Will be set after bind group layouts created
 
-        // vertex buffers: two separate buffers, each float32x3
-        this.#vertexBufferLayouts = [];
+        // vertex buffer: float32x3
         this.#shaderWaveformVisualizerModule = shaderWaveformVisualizerModule;
     }
 
@@ -276,7 +272,6 @@ class WaveformVisualizer {
                 vertex: {
                     module: this.#shaderWaveformVisualizerModule,
                     entryPoint: "vs_head",
-                    buffers: this.#vertexBufferLayouts
                 },
                 fragment: {
                     module: this.#shaderWaveformVisualizerModule,
