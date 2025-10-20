@@ -12,12 +12,6 @@ import GpuContextManager from "./gpuContextManager.js";
 
 // import shaderWaveformVisualizerUrl from '@/waveformVisualizer.wgsl?raw';
 
-async function loadShader(url) {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Failed to load shader: ${url}`);
-    return await response.text();
-}
-
 class WaveformVisualizer {
     static #instance = null;
 
@@ -69,6 +63,12 @@ class WaveformVisualizer {
     #waveformBindGroup;
     /** @type {GPUBindGroupLayout | null} */
     #waveformBindGroupLayout;
+
+    static async loadShader(url) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to load shader: ${url}`);
+        return await response.text();
+    }
 
     /**
      * Initializes the singleton instance of WaveformVisualizer with the provided canvas and event bus.
@@ -135,7 +135,7 @@ class WaveformVisualizer {
         }
 
         (async () => {
-            this.#shaderWaveformVisualizerCode = await loadShader('./shaderWaveformVisualizer.wgsl');
+            this.#shaderWaveformVisualizerCode = await WaveformVisualizer.loadShader('./shaderWaveformVisualizer.wgsl');
 
             this.#setupPipeline();
             this.updateUniformBuffer();
