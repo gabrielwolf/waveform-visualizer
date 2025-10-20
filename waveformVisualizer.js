@@ -75,7 +75,7 @@ class WaveformVisualizer {
         const raw = new Uint16Array(arrayBuffer);
         const normalized = new Float32Array(raw.length);
         for (let i = 0; i < raw.length; i++) {
-            normalized[i] = (raw[i] / 4096) * 2 - 0; // 12-bit -> [-1,1]
+            normalized[i] = (raw[i] / 4095) * 1; // 12-bit -> [0,1]
         }
         return normalized;
     }
