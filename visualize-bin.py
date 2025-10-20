@@ -17,16 +17,18 @@ data = data.reshape((num_samples, num_channels))
 print(f"Reshaped to {data.shape} (samples x channels)")
 
 # --- Pick first channel ---
-channel0 = data[:, 0]
+# channel0 = data[:, 0]
 
 # --- Optional: normalize to 0..1 ---
 # channel0_norm = channel0 / np.max(channel0)
 
-# --- Plot ---
-plt.figure(figsize=(15, 4))
-plt.plot(channel0, color="black")
-plt.title("Waveform - Channel 0")
+# --- Plot all channels ---
+plt.figure(figsize=(15, 6))
+for ch in range(num_channels):
+    plt.plot(data[:, ch] + ch, label=f'Channel {ch+1}')  # offset each line for visibility
+plt.title("Waveform Channels")
 plt.xlabel("Sample Index")
-plt.ylabel("Normalized Amplitude")
+plt.ylabel("Normalized Amplitude + Offset")
+plt.legend()
 plt.grid(True)
 plt.show()
