@@ -63,11 +63,20 @@ class WaveformVisualizer {
     #waveformBindGroup;
     /** @type {GPUBindGroupLayout | null} */
     #waveformBindGroupLayout;
+    #waveformData;
+    #waveformBuffer;
 
     static async loadShader(url) {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to load shader: ${url}`);
         return await response.text();
+    }
+
+    static async loadBinaryFile(url) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to load binary file: ${url}`);
+        const arrayBuffer = await response.arrayBuffer();
+        return new Float32Array(arrayBuffer);
     }
 
     /**
@@ -136,6 +145,7 @@ class WaveformVisualizer {
 
         (async () => {
             this.#shaderWaveformVisualizerCode = await WaveformVisualizer.loadShader('./shaderWaveformVisualizer.wgsl');
+            this.#waveformData = await WaveformVisualizer.loadBinaryFile('./mean.bin');
 
             this.#setupPipeline();
             this.updateUniformBuffer();
@@ -261,6 +271,22 @@ class WaveformVisualizer {
             ],
         });
 
+        if (this.#waveformData) {
+            const sampleCount = this.#waveformData.length;
+            const vertexData = new Float32Array(sampleCount * 2);
+            for (let i = 0; i < sampleCount; i++) {
+                vertexData[i * 2] = (i / (sampleCount - 1)) * 2 - 1; // x: -1 → 1
+                vertexData[i * 2 + 1] = this.#waveformData[i];       // y: audio sample
+            }
+            this.#waveformBuffer = this.#gpuDevice.createBuffer({
+                size: vertexData.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Float32Array(this.#waveformBuffer.getMappedRange()).set(vertexData);
+            this.#waveformBuffer.unmap();
+        }
+
         // Now create pipeline layout and pipeline if not already created
         if (!this.#pipeline) {
             this.#pipelineLayout = this.#gpuDevice.createPipelineLayout({
@@ -272,6 +298,18 @@ class WaveformVisualizer {
                 vertex: {
                     module: this.#shaderWaveformVisualizerModule,
                     entryPoint: "vs_head",
+                    buffers: [
+                        {
+                            arrayStride: 8, // two floats per vertex (2 * 4 bytes)
+                            attributes: [
+                                {
+                                    shaderLocation: 0, // matches @location(0)
+                                    offset: 0,
+                                    format: "float32x2"
+                                }
+                            ]
+                        }
+                    ]
                 },
                 fragment: {
                     module: this.#shaderWaveformVisualizerModule,
@@ -292,7 +330,7 @@ class WaveformVisualizer {
                         }
                     }],
                 },
-                primitive: {topology: "triangle-list", cullMode: 'back'},
+                primitive: {topology: "line-strip"},
                 multisample: {count: 4},
             });
         }
@@ -326,7 +364,8 @@ class WaveformVisualizer {
             renderPass.setPipeline(this.#pipeline);
             renderPass.setBindGroup(0, this.#uniformBindGroup);
             renderPass.setBindGroup(1, this.#waveformBindGroup);
-            renderPass.draw(3, 1, 0, 0);
+            renderPass.setVertexBuffer(0, this.#waveformBuffer);
+            renderPass.draw(this.#waveformData.length / 2, 1, 0, 0);
 
             renderPass.end();
 
