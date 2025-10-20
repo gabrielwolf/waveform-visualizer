@@ -55,7 +55,9 @@ class WaveformVisualizer {
     /** @type {number | null} */
     #smoothingFactor;
 
+    /** @type {Float32Array} */
     #waveformData;
+    /** @type {GPUBuffer} */
     #waveformBuffer;
 
     static async loadShader(url) {
