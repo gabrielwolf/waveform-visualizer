@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 # --- Parameters ---
 bin_file = "peak.bin"  # or "peak.bin"
 num_channels = 16      # matches your waveform processing
-dtype = np.uint16      # as in resize.py
+dtype = np.uint16      # as in generate-bins.py
 
 # --- Load binary file ---
 data = np.fromfile(bin_file, dtype=dtype)
