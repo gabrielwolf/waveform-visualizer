@@ -10,7 +10,7 @@ import GpuContextManager from "./gpuContextManager.js";
 
 /** @typedef {import('webgpu-types').GPUBufferUsage} GPUBufferUsage */
 
-// import shaderWaveformVisualizerUrl from '@/waveformVisualizer.wgsl?raw';
+// import shaderWaveformUrl from '@/waveformVisualizer.wgsl?raw';
 
 class WaveformVisualizer {
     static #instance = null;
@@ -29,18 +29,32 @@ class WaveformVisualizer {
     /** @type {GPUCanvasContext | null} */
     #context;
     /** @type {string | null} */
-    #shaderWaveformVisualizerCode;
+    #shaderWaveformCode;
     /** @type {GPUShaderModule | null} */
-    #shaderWaveformVisualizerModule;
+    #shaderWaveformModule;
 
     /** @type {GPUBuffer | null} */
     #uniformBuffer;
 
     /** @type {GPUTexture | null} */
     #displayTextureMSAA;
+    /** @type {GPUTexture | null} */
+    #waveformTexture;
+    /** @type {GPUTextureView | null} */
+    #waveformTextureView;
 
     /** @type {GPURenderPipeline | null} */
     #pipeline;
+    /** @type {GPURenderPipeline | null} */
+    #mirrorPipeline;
+    /** @type {GPUShaderModule | null} */
+    #mirrorShaderModule;
+    /** @type {GPUBuffer | null} */
+    #fullscreenQuadBuffer;
+    /** @type {GPUBindGroupLayout | null} */
+    #mirrorBindGroupLayout;
+    /** @type {GPUBindGroup | null} */
+    #mirrorBindGroup;
     /** @type {GPUPipelineLayout | null} Pipeline layout combining uniform and energy bind group layouts. */
     #pipelineLayout;
     /** @type {GPUBindGroup | null} */
@@ -59,6 +73,11 @@ class WaveformVisualizer {
     #waveformData;
     /** @type {GPUBuffer} */
     #waveformBuffer;
+    /** @type {string | null} */
+    #shaderMirrorCode;
+    /** @type {GPUShaderModule | null} */
+    #shaderMirrorModule;
+
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -110,7 +129,7 @@ class WaveformVisualizer {
         this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
         this.#canvasFormat = null;
         this.#canvasColorSpace = null;
-        this.#shaderWaveformVisualizerCode = null;
+        this.#shaderWaveformCode = null;
 
         this.#boost = 1.5;
         this.#gamma = 0.45;
@@ -142,7 +161,8 @@ class WaveformVisualizer {
         }
 
         (async () => {
-            this.#shaderWaveformVisualizerCode = await WaveformVisualizer.loadShader('./shaderWaveformVisualizer.wgsl');
+            this.#shaderWaveformCode = await WaveformVisualizer.loadShader('./shaderWaveform.wgsl');
+            this.#shaderMirrorCode = await WaveformVisualizer.loadShader('./shaderMirror.wgsl');
             this.#waveformData = await WaveformVisualizer.loadBinaryFile('./mean.bin');
 
             this.#setupPipeline();
@@ -193,6 +213,7 @@ class WaveformVisualizer {
 
         // Destroy old textures if present
         this.#displayTextureMSAA?.destroy();
+        this.#waveformTexture?.destroy();
 
         // --- Create main render target texture ---
         // this was present here in the dumme head and space visualizer
@@ -205,8 +226,17 @@ class WaveformVisualizer {
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
 
+        // Create waveform texture for first pass (offscreen)
+        this.#waveformTexture = this.#gpuDevice.createTexture({
+            size: [this.#canvas.width, this.#canvas.height],
+            format: this.#canvasFormat,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+        });
+        this.#waveformTextureView = this.#waveformTexture.createView();
+
         // Recreate bind groups if needed
         this.#setupBindGroups();
+        this.#setupMirrorBindGroup();
     }
 
     /**
@@ -214,10 +244,13 @@ class WaveformVisualizer {
      * @private
      */
     #setupPipeline() {
-        this.#shaderWaveformVisualizerModule = this.#gpuDevice.createShaderModule({
-            code: this.#shaderWaveformVisualizerCode
+        this.#shaderWaveformModule = this.#gpuDevice.createShaderModule({
+            code: this.#shaderWaveformCode
         });
-        const shaderWaveformVisualizerModule = this.#shaderWaveformVisualizerModule;
+
+        this.#shaderMirrorModule = this.#gpuDevice.createShaderModule({
+            code: this.#shaderMirrorCode
+        });
 
         const uniformData = new Float32Array([this.#boost, this.#gamma, 0, 0]);
         this.#uniformBuffer = this.#gpuDevice.createBuffer({
@@ -236,8 +269,96 @@ class WaveformVisualizer {
         // Create pipeline layout using uniform bind group layouts. We'll patch pipeline in #setupBindGroups
         this.#pipelineLayout = null;
 
-        // vertex buffer: float32x3
-        this.#shaderWaveformVisualizerModule = shaderWaveformVisualizerModule;
+
+        // --- Setup mirror pipeline and fullscreen quad ---
+        // Create shader module for mirror pass
+
+        this.#mirrorShaderModule = this.#gpuDevice.createShaderModule({
+            code: this.#shaderMirrorCode,
+        });
+
+        // Fullscreen quad vertex buffer: 2D position and UV
+        // 2 triangles (triangle strip): positions [-1,1] and [0,0]-[1,1]
+        const quadVertices = new Float32Array([
+            //  position   uv
+            -1, -1, 0, 0,
+            1, -1, 1, 0,
+            -1, 1, 0, 1,
+            1, 1, 1, 1,
+        ]);
+        this.#fullscreenQuadBuffer = this.#gpuDevice.createBuffer({
+            size: quadVertices.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+            mappedAtCreation: true,
+        });
+        new Float32Array(this.#fullscreenQuadBuffer.getMappedRange()).set(quadVertices);
+        this.#fullscreenQuadBuffer.unmap();
+
+        // Mirror bind group layout
+        this.#mirrorBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
+            entries: [
+                {binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {}},
+                {binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
+            ]
+        });
+
+        // Mirror pipeline layout
+        const mirrorPipelineLayout = this.#gpuDevice.createPipelineLayout({
+            bindGroupLayouts: [this.#mirrorBindGroupLayout]
+        });
+        this.#mirrorPipeline = this.#gpuDevice.createRenderPipeline({
+            layout: mirrorPipelineLayout,
+            vertex: {
+                module: this.#mirrorShaderModule,
+                entryPoint: "vs_fullscreen",
+                buffers: [
+                    {
+                        arrayStride: 16,
+                        attributes: [
+                            {shaderLocation: 0, offset: 0, format: "float32x2"}, // position
+                            {shaderLocation: 1, offset: 8, format: "float32x2"}, // uv
+                        ]
+                    }
+                ]
+            },
+            fragment: {
+                module: this.#mirrorShaderModule,
+                entryPoint: "fs_mirror",
+                targets: [{
+                    format: this.#canvasFormat,
+                    blend: {
+                        color: {
+                            srcFactor: 'src-alpha',
+                            dstFactor: 'one-minus-src-alpha',
+                            operation: 'add',
+                        },
+                        alpha: {
+                            srcFactor: 'one',
+                            dstFactor: 'one-minus-src-alpha',
+                            operation: 'add',
+                        }
+                    }
+                }]
+            },
+            primitive: {topology: "triangle-strip"},
+            multisample: {count: 1}
+        });
+    }
+
+    #setupMirrorBindGroup() {
+        if (!this.#waveformTextureView || !this.#mirrorBindGroupLayout) return;
+        // Create a sampler for use in the mirror pass
+        const sampler = this.#gpuDevice.createSampler({
+            magFilter: 'linear',
+            minFilter: 'linear',
+        });
+        this.#mirrorBindGroup = this.#gpuDevice.createBindGroup({
+            layout: this.#mirrorBindGroupLayout,
+            entries: [
+                {binding: 0, resource: this.#waveformTextureView},
+                {binding: 1, resource: sampler}
+            ]
+        });
     }
 
     /**
@@ -279,7 +400,7 @@ class WaveformVisualizer {
             this.#pipeline = this.#gpuDevice.createRenderPipeline({
                 layout: this.#pipelineLayout,
                 vertex: {
-                    module: this.#shaderWaveformVisualizerModule,
+                    module: this.#shaderWaveformModule,
                     entryPoint: "vs_head",
                     buffers: [
                         {
@@ -295,7 +416,7 @@ class WaveformVisualizer {
                     ]
                 },
                 fragment: {
-                    module: this.#shaderWaveformVisualizerModule,
+                    module: this.#shaderWaveformModule,
                     entryPoint: "fs_head",
                     targets: [{
                         format: this.#canvasFormat,
@@ -321,10 +442,12 @@ class WaveformVisualizer {
 
     /**
      * Main render loop.
+     * Pass 1: Draw waveform to offscreen texture.
+     * Pass 2: Draw mirrored quad using that texture to swap chain.
      */
     #renderLoop() {
         const frame = () => {
-            if (!this.#displayTextureMSAA) {
+            if (!this.#waveformTexture || !this.#mirrorPipeline || !this.#fullscreenQuadBuffer || !this.#mirrorBindGroup || !this.#waveformBuffer) {
                 requestAnimationFrame(frame);
                 return;
             }
@@ -332,27 +455,35 @@ class WaveformVisualizer {
             // --- Begin encoding commands for this frame ---
             const encoder = this.#gpuDevice.createCommandEncoder();
 
-            // --- Pass 1: Render Pass ---
-            const renderPass = encoder.beginRenderPass({
+            // --- Pass 1: Render waveform into offscreen texture ---
+            const pass1 = encoder.beginRenderPass({
                 colorAttachments: [{
-                    // For multisampling use these lines
-                    // view: this.#displayTextureMSAA.createView(),
-                    // resolveTarget: this.#context.getCurrentTexture().createView(),
+                    view: this.#waveformTextureView,
+                    loadOp: 'clear',
+                    storeOp: 'store',
+                    clearValue: {r: 0, g: 0, b: 0, a: 0},
+                }],
+            });
+            pass1.setPipeline(this.#pipeline);
+            pass1.setBindGroup(0, this.#uniformBindGroup);
+            pass1.setVertexBuffer(0, this.#waveformBuffer);
+            pass1.draw(this.#waveformData.length / 2, 1, 0, 0);
+            pass1.end();
 
+            // --- Pass 2: Draw mirrored quad to swap chain ---
+            const pass2 = encoder.beginRenderPass({
+                colorAttachments: [{
                     view: this.#context.getCurrentTexture().createView(),
                     loadOp: 'clear',
                     storeOp: 'store',
                     clearValue: {r: 0, g: 0, b: 0, a: 0},
                 }],
             });
-
-            // Draw head mesh
-            renderPass.setPipeline(this.#pipeline);
-            renderPass.setBindGroup(0, this.#uniformBindGroup);
-            renderPass.setVertexBuffer(0, this.#waveformBuffer);
-            renderPass.draw(this.#waveformData.length / 2, 1, 0, 0);
-
-            renderPass.end();
+            pass2.setPipeline(this.#mirrorPipeline);
+            pass2.setBindGroup(0, this.#mirrorBindGroup);
+            pass2.setVertexBuffer(0, this.#fullscreenQuadBuffer);
+            pass2.draw(4, 1, 0, 0);
+            pass2.end();
 
             this.#gpuDevice.queue.submit([encoder.finish()]);
             requestAnimationFrame(frame);
