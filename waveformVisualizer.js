@@ -37,10 +37,6 @@ class WaveformVisualizer {
     #uniformBuffer;
 
     /** @type {GPUTexture | null} */
-    #renderTexture;
-    /** @type {GPUTextureView | null} */
-    #renderTextureView;
-    /** @type {GPUTexture | null} */
     #displayTextureMSAA;
 
     /** @type {GPURenderPipeline | null} */
@@ -135,7 +131,6 @@ class WaveformVisualizer {
             this.#canvasColorSpace = context.colorSpace;
             this.#internalFormat = context.internalFormat;
 
-            this.#renderTexture?.destroy();
             this.#displayTextureMSAA?.destroy();
 
             this.#setupPipeline();
@@ -199,15 +194,10 @@ class WaveformVisualizer {
         this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
 
         // Destroy old textures if present
-        this.#renderTexture?.destroy();
         this.#displayTextureMSAA?.destroy();
 
         // --- Create main render target texture ---
-        this.#renderTexture = this.#createTexture(
-            this.#canvas.width, this.#canvas.height, this.#canvasFormat,
-            GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
-        );
-        this.#renderTextureView = this.#renderTexture.createView();
+        // this was present here in the dumme head and space visualizer
 
         // --- Optionally: create multisampled texture for antialiasing ---
         this.#displayTextureMSAA = this.#gpuDevice.createTexture({
