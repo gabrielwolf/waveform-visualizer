@@ -31,8 +31,25 @@ for x in range(image_width):
 
 # Quantize to 12 bits
 max_val = 2**bit_depth - 1
-peak = ((peak / 32767) * max_val).astype(dtype)
-mean = ((mean / 32767) * max_val).astype(dtype)
+peak = ((peak / 32767) * max_val)
+mean = ((mean / 32767) * max_val)
+
+# Normalize relative to first channel max peak and mean
+first_channel_peak_max = np.max(peak[:, 0])
+first_channel_mean_max = np.max(mean[:, 0])
+
+# Scale all channels so that first channel max peak maps to 4095
+peak = (peak / first_channel_peak_max) * max_val
+mean = (mean / first_channel_mean_max) * max_val
+
+# Clip to 0..4095 and cast to uint16
+peak = np.clip(peak, 0, max_val).astype(dtype)
+mean = np.clip(mean, 0, max_val).astype(dtype)
+
+max_peak_ch0 = np.max(peak[:, 0])
+max_mean_ch0 = np.max(mean[:, 0])
+print(f"First channel max peak: {max_peak_ch0}")
+print(f"First channel max mean: {max_mean_ch0}")
 
 # Save compact binary for GPU
 peak.tofile("peak.bin")
