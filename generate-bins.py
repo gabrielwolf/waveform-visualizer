@@ -46,10 +46,12 @@ mean = (mean / first_channel_mean_max) * max_val
 peak = np.clip(peak, 0, max_val).astype(dtype)
 mean = np.clip(mean, 0, max_val).astype(dtype)
 
-max_peak_ch0 = np.max(peak[:, 0])
-max_mean_ch0 = np.max(mean[:, 0])
-print(f"First channel max peak: {max_peak_ch0}")
-print(f"First channel max mean: {max_mean_ch0}")
+# Test results
+# num_channels = peak.shape[1]  # 16 in your case
+# for ch in range(num_channels):
+#     max_peak_ch = np.max(peak[:, ch])
+#     max_mean_ch = np.max(mean[:, ch])
+#     print(f"Channel {ch + 1:02d} peak: {max_peak_ch}, mean: {max_mean_ch}")
 
 # Save compact binary for GPU
 peak.tofile("peak.bin")
