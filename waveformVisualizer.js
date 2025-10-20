@@ -76,7 +76,12 @@ class WaveformVisualizer {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to load binary file: ${url}`);
         const arrayBuffer = await response.arrayBuffer();
-        return new Float32Array(arrayBuffer);
+        const raw = new Uint16Array(arrayBuffer);
+        const normalized = new Float32Array(raw.length);
+        for (let i = 0; i < raw.length; i++) {
+            normalized[i] = (raw[i] / 4096) * 2 - 0; // 12-bit -> [-1,1]
+        }
+        return normalized;
     }
 
     /**
@@ -275,7 +280,7 @@ class WaveformVisualizer {
             const sampleCount = this.#waveformData.length;
             const vertexData = new Float32Array(sampleCount * 2);
             for (let i = 0; i < sampleCount; i++) {
-                vertexData[i * 2] = (i / (sampleCount - 1)) * 2 - 1; // x: -1 → 1
+                vertexData[i * 2] = (i / (sampleCount - 1)) * 4 - 1; // x: -1 → 1
                 vertexData[i * 2 + 1] = this.#waveformData[i];       // y: audio sample
             }
             this.#waveformBuffer = this.#gpuDevice.createBuffer({
