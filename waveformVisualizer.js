@@ -41,11 +41,7 @@ class WaveformVisualizer {
 
     /** @type {GPUBuffer | null} */
     #uniformBuffer;
-    /** @type {number} */
-    #indexCount = 0;
 
-    /** @type {GPUTexture | null} */
-    #depthTexture;
     /** @type {GPUTexture | null} */
     #renderTexture;
     /** @type {GPUTextureView | null} */
@@ -130,7 +126,6 @@ class WaveformVisualizer {
 
             this.#renderTexture?.destroy();
             this.#displayTextureMSAA?.destroy();
-            this.#depthTexture?.destroy();
 
             this.#setupPipeline();
             this.#resizeTextures();
@@ -180,7 +175,7 @@ class WaveformVisualizer {
     }
 
     /**
-     * (Re)creates textures, depth buffers, and updates bind groups on resize or format change.
+     * (Re)creates textures, and updates bind groups on resize or format change.
      * @private
      */
     #resizeTextures() {
@@ -194,14 +189,6 @@ class WaveformVisualizer {
         // Destroy old textures if present
         this.#renderTexture?.destroy();
         this.#displayTextureMSAA?.destroy();
-        this.#depthTexture?.destroy();
-
-        this.#depthTexture = this.#gpuDevice.createTexture({
-            size: [this.#canvas.width, this.#canvas.height],
-            format: 'depth24plus',
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-            sampleCount: 4,
-        });
 
         // --- Create main render target texture ---
         this.#renderTexture = this.#createTexture(
@@ -312,11 +299,6 @@ class WaveformVisualizer {
                 },
                 primitive: {topology: "triangle-list", cullMode: 'back'},
                 multisample: {count: 4},
-                depthStencil: {
-                    format: 'depth24plus',
-                    depthWriteEnabled: true,
-                    depthCompare: 'less'
-                }
             });
         }
     }
@@ -326,7 +308,7 @@ class WaveformVisualizer {
      */
     #renderLoop() {
         const frame = () => {
-            if (!this.#displayTextureMSAA || !this.#depthTexture) {
+            if (!this.#displayTextureMSAA) {
                 requestAnimationFrame(frame);
                 return;
             }
@@ -343,12 +325,6 @@ class WaveformVisualizer {
                     storeOp: 'store',
                     clearValue: {r: 0, g: 0, b: 0, a: 0},
                 }],
-                depthStencilAttachment: {
-                    view: this.#depthTexture.createView(),
-                    depthLoadOp: 'clear',
-                    depthStoreOp: 'store',
-                    depthClearValue: 1.0,
-                }
             });
 
             // Draw head mesh
