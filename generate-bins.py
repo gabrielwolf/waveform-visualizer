@@ -1,4 +1,21 @@
 import numpy as np
+from scipy.signal import resample
+
+def true_peak(segment, upsample=4):
+    """
+    segment: (N, num_channels)
+    upsample: factor to interpolate
+    returns: true peak per channel
+    """
+    N, C = segment.shape
+    true_peaks = np.zeros(C, dtype=np.float64)
+
+    for ch in range(C):
+        # Upsample by factor
+        seg_upsampled = resample(segment[:, ch], N * upsample)
+        true_peaks[ch] = np.max(np.abs(seg_upsampled))
+
+    return true_peaks
 
 # Parameters
 num_channels = 16
@@ -24,7 +41,13 @@ for x in range(image_width):
     segment = raw[start:end]
 
     # Peak amplitude per channel
-    peak[x] = np.max(np.abs(segment), axis=0)
+    # peak[x] = np.max(np.abs(segment), axis=0)
+
+    # True peak per channel
+    peak[x] = true_peak(segment, upsample=8)
+
+    # Mean amplitude per channel
+    # mean[x] = np.mean(np.abs(segment), axis=0)
 
     # RMS amplitude per channel
     mean[x] = np.sqrt(np.mean(segment.astype(np.float64)**2, axis=0))
