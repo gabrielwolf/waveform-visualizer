@@ -45,6 +45,14 @@ class WaveformVisualizer {
     #gamma;
     /** @type {number | null} */
     #smoothingFactor;
+    #timeBuffer;
+    #outputTexture;
+    #outputTextureView;
+    #computeBindGroupLayout;
+    #computePipeline;
+    #computeBindGroup;
+    #blitPipeline;
+    #blitBindGroup;
 
 
     static async loadShader(url) {
@@ -131,7 +139,7 @@ class WaveformVisualizer {
         (async () => {
             this.#shaderWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
 
-            this.#setupPipeline();
+            await this.#setupPipeline();
             this.updateUniformBuffer();
 
             this.#resizeTextures();
@@ -151,7 +159,6 @@ class WaveformVisualizer {
 
     /**
      * (Re)creates textures and updates bind groups on resize or format change.
-     * @private
      */
     #resizeTextures() {
         // Guard against race condition with render loop
@@ -174,12 +181,115 @@ class WaveformVisualizer {
     }
 
     /**
-     * Sets up compute and rendering pipeline (stub for compute-based approach).
-     * @private
+     * Sets up compute and rendering pipeline
      */
-    #setupPipeline() {
-        // In compute-based approach, setup compute pipeline and related buffers here.
-        // This is a stub placeholder.
+    async #setupPipeline() {
+        this.#shaderWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
+        this.#shaderWaveformModule = this.#gpuDevice.createShaderModule({
+            code: this.#shaderWaveformCode,
+        });
+
+        // Create uniform buffer (for time)
+        this.#timeBuffer = this.#gpuDevice.createBuffer({
+            size: 4,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        // Create output texture (storage + sampled)
+        this.#outputTexture = this.#gpuDevice.createTexture({
+            size: [this.#canvas.width, this.#canvas.height],
+            format: this.#canvasFormat,
+            usage:
+                GPUTextureUsage.STORAGE_BINDING |
+                GPUTextureUsage.TEXTURE_BINDING |
+                GPUTextureUsage.RENDER_ATTACHMENT |
+                GPUTextureUsage.COPY_SRC,
+        });
+
+        this.#outputTextureView = this.#outputTexture.createView();
+
+        // Compute bind group layout
+        this.#computeBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {access: "write-only", format: this.#canvasFormat}
+                },
+                {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}},
+            ]
+        });
+
+        // Compute pipeline
+        this.#computePipeline = this.#gpuDevice.createComputePipeline({
+            layout: this.#gpuDevice.createPipelineLayout({
+                bindGroupLayouts: [this.#computeBindGroupLayout]
+            }),
+            compute: {
+                module: this.#shaderWaveformModule,
+                entryPoint: "main",
+            },
+        });
+
+        this.#computeBindGroup = this.#gpuDevice.createBindGroup({
+            layout: this.#computeBindGroupLayout,
+            entries: [
+                {binding: 0, resource: this.#outputTextureView},
+                {binding: 1, resource: {buffer: this.#timeBuffer}},
+            ],
+        });
+
+        // ------------ 2nd pass ------------
+
+        const blitShaderCode = await WaveformVisualizer.loadShader('./shaderBlit.wgsl');
+        const blitShaderModule = this.#gpuDevice.createShaderModule({
+            code: blitShaderCode,
+        });
+
+        // Create sampler for sampling compute texture
+        const blitSampler = this.#gpuDevice.createSampler({
+            magFilter: 'linear',
+            minFilter: 'linear',
+        });
+
+        // Create bind group layout for texture + sampler
+        const blitBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
+            entries: [
+                {binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {}},
+                {binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
+            ],
+        });
+
+        // Create pipeline layout
+        const blitPipelineLayout = this.#gpuDevice.createPipelineLayout({
+            bindGroupLayouts: [blitBindGroupLayout],
+        });
+
+        // Create render pipeline
+        this.#blitPipeline = this.#gpuDevice.createRenderPipeline({
+            layout: blitPipelineLayout,
+            vertex: {
+                module: blitShaderModule,
+                entryPoint: 'vs_main',
+            },
+            fragment: {
+                module: blitShaderModule,
+                entryPoint: 'fs_main',
+                targets: [
+                    {format: this.#canvasFormat},
+                ],
+            },
+            primitive: {topology: 'triangle-list'},
+        });
+
+        // Create bind group linking compute texture + sampler
+        this.#blitBindGroup = this.#gpuDevice.createBindGroup({
+            layout: blitBindGroupLayout,
+            entries: [
+                {binding: 0, resource: this.#outputTextureView},
+                {binding: 1, resource: blitSampler},
+            ],
+        });
     }
 
     /**
@@ -194,8 +304,45 @@ class WaveformVisualizer {
      * Main render loop (stub for compute-based approach).
      */
     #renderLoop() {
-        // In compute-based approach, perform compute pass and present result here.
-        // This is a stub placeholder.
+        let time = 0;
+        const frame = () => {
+            if (!this.#gpuDevice || !this.#computePipeline || !this.#blitPipeline || !this.#outputTexture) {
+                requestAnimationFrame(frame);
+                return;
+            }
+
+            time += 0.016;
+            this.#gpuDevice.queue.writeBuffer(this.#timeBuffer, 0, new Float32Array([time]));
+
+            const encoder = this.#gpuDevice.createCommandEncoder();
+
+            // --- Compute pass ---
+            const computePass = encoder.beginComputePass();
+            computePass.setPipeline(this.#computePipeline);
+            computePass.setBindGroup(0, this.#computeBindGroup);
+            const workgroupsX = Math.ceil(this.#canvas.width / 8);
+            const workgroupsY = Math.ceil(this.#canvas.height / 8);
+            computePass.dispatchWorkgroups(workgroupsX, workgroupsY);
+            computePass.end();
+
+            // --- Render pass (blit to canvas) ---
+            const renderPass = encoder.beginRenderPass({
+                colorAttachments: [{
+                    view: this.#context.getCurrentTexture().createView(),
+                    loadOp: 'clear',
+                    storeOp: 'store',
+                    clearValue: {r: 0, g: 0, b: 0, a: 1},
+                }]
+            });
+            renderPass.setPipeline(this.#blitPipeline);
+            renderPass.setBindGroup(0, this.#blitBindGroup);
+            renderPass.draw(6, 1, 0, 0);
+            renderPass.end();
+
+            this.#gpuDevice.queue.submit([encoder.finish()]);
+            requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
     }
 
     /**

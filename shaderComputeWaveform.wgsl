@@ -1,21 +1,19 @@
-struct VertexInput {
-    @location(0) position: vec2f,
-};
+@group(0) @binding(0) var outImage : texture_storage_2d<rgba16float, write>;
+@group(0) @binding(1) var<uniform> time : f32;
 
-struct VertexOutput {
-    @builtin(position) position : vec4f,
-    @location(0) color: vec4f,
-};
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outImage);
+    if (gid.x >= dims.x || gid.y >= dims.y) {
+        return;
+    }
 
-@vertex
-fn vs_head(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    output.position = vec4f(input.position, 0.0, 1.0);
-    output.color = vec4f(1.0, 1.0, 1.0, 1.0);
-    return output;
-}
+    // Normalize coordinates to [0,1]
+    let uv = vec2<f32>(f32(gid.x) / f32(dims.x), f32(gid.y) / f32(dims.y));
 
-@fragment
-fn fs_head(input: VertexOutput) -> @location(0) vec4f {
-    return input.color;
+    // Simple animated gradient
+    let r = uv.x;
+    let g = uv.y;
+    let b = 0.5 + 0.5 * sin(time + uv.x * 10.0);
+    textureStore(outImage, vec2<i32>(gid.xy), vec4f(r, g, b, 1.0));
 }
