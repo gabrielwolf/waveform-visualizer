@@ -77,7 +77,10 @@ class WaveformVisualizer {
     #shaderMirrorCode;
     /** @type {GPUShaderModule | null} */
     #shaderMirrorModule;
+    /** @type {number | null} */
     #numVertices;
+    /** @type {GPUBuffer | null} */
+    #mirrorUniformBuffer;
 
 
     static async loadShader(url) {
@@ -235,6 +238,11 @@ class WaveformVisualizer {
         });
         this.#waveformTextureView = this.#waveformTexture.createView();
 
+        const resolution = new Float32Array([this.#canvas.width, this.#canvas.height]);
+        if (this.#mirrorUniformBuffer) {
+            this.#gpuDevice.queue.writeBuffer(this.#mirrorUniformBuffer, 0, resolution.buffer);
+        }
+
         // Recreate bind groups if needed
         this.#setupBindGroups();
         this.#setupMirrorBindGroup();
@@ -300,6 +308,7 @@ class WaveformVisualizer {
             entries: [
                 {binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {}},
                 {binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
+                {binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: {type: "uniform"}},
             ]
         });
 
@@ -348,16 +357,28 @@ class WaveformVisualizer {
 
     #setupMirrorBindGroup() {
         if (!this.#waveformTextureView || !this.#mirrorBindGroupLayout) return;
+
         // Create a sampler for use in the mirror pass
         const sampler = this.#gpuDevice.createSampler({
             magFilter: 'linear',
             minFilter: 'linear',
         });
+
+        // --- Create resolution uniform buffer ---
+        const resolution = new Float32Array([this.#canvas.width, this.#canvas.height]);
+        this.#mirrorUniformBuffer = this.#gpuDevice.createBuffer({
+            size: resolution.byteLength,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        this.#gpuDevice.queue.writeBuffer(this.#mirrorUniformBuffer, 0, resolution.buffer, resolution.byteOffset, resolution.byteLength);
+
+        // --- Create bind group including texture, sampler, and resolution uniform ---
         this.#mirrorBindGroup = this.#gpuDevice.createBindGroup({
             layout: this.#mirrorBindGroupLayout,
             entries: [
                 {binding: 0, resource: this.#waveformTextureView},
-                {binding: 1, resource: sampler}
+                {binding: 1, resource: sampler},
+                {binding: 2, resource: {buffer: this.#mirrorUniformBuffer}},
             ]
         });
     }

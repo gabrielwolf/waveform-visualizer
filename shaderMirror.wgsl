@@ -8,8 +8,13 @@ struct VertexOutput {
     @location(0) uv: vec2f,
 };
 
+struct Uniforms {
+    resolution : vec2f,
+};
+
 @group(0) @binding(0) var waveformTexture: texture_2d<f32>;
 @group(0) @binding(1) var waveformSampler: sampler;
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
 
 @vertex
 fn vs_fullscreen(input: VertexInput) -> VertexOutput {
@@ -22,7 +27,8 @@ fn vs_fullscreen(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_mirror(input: VertexOutput) -> @location(0) vec4f {
     let uv = input.uv;
-    let mirroredUv = vec2f(uv.x, 1.0 - uv.y);
+    let pixelOffset = 1.0 / uniforms.resolution.y;
+    let mirroredUv = vec2f(uv.x, clamp(1.0 - uv.y - pixelOffset, 0.0, 1.0));
 
     let color = textureSampleLevel(waveformTexture, waveformSampler, uv, 0.0);
     let mirroredColor = textureSampleLevel(waveformTexture, waveformSampler, mirroredUv, 0.0);
