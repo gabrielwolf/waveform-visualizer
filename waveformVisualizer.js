@@ -379,14 +379,22 @@ class WaveformVisualizer {
         if (this.#waveformData) {
             const numChannels = 16;
             const numBins = this.#waveformData.length / numChannels;
-            this.#numVertices = numBins;
-            const vertexData = new Float32Array(numBins * 2);
+            this.#numVertices = numBins * 2; // 2 vertices per bin
+
+            const vertexData = new Float32Array(numBins * 4); // (x,y) + (x,baseline)
             for (let i = 0; i < numBins; i++) {
-                // take first channel only (index i * numChannels)
-                const value = this.#waveformData[i * numChannels];
-                vertexData[i * 2] = (i / (numBins - 1)) * 2 - 1; // full width
-                vertexData[i * 2 + 1] = value;                   // normalized 0..1
+                const x = (i / (numBins - 1)) * 2 - 1; // full width
+                const y = this.#waveformData[i * numChannels]; // normalized 0..1
+
+                // top vertex (waveform)
+                vertexData[i * 4 + 0] = x;
+                vertexData[i * 4 + 1] = y;
+
+                // bottom vertex (baseline)
+                vertexData[i * 4 + 2] = x;
+                vertexData[i * 4 + 3] = 0.0; // since we now mirror, center baseline at 0
             }
+
             this.#waveformBuffer = this.#gpuDevice.createBuffer({
                 size: vertexData.byteLength,
                 usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
