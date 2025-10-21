@@ -38,7 +38,7 @@ fn fs_mirror(input: VertexOutput) -> @location(0) vec4f {
     );
 
     // Sample greyscale value from background texture (peak.bin)
-    let waveformSample = textureSampleLevel(backgroundTexture, waveformSampler, vec2f(uv.x, 0.5), 0.0).g * 1.65 - 2.0;
+    let waveformSample = textureSampleLevel(backgroundTexture, waveformSampler, vec2f(uv.x, 0.5), 0.0).g * 1.05 - 1.0;
 
     // Scale down for safety (optional)
     let greyValue = waveformSample * mask.a;

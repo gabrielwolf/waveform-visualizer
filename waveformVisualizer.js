@@ -73,6 +73,10 @@ class WaveformVisualizer {
     #waveformData;
     /** @type {GPUBuffer} */
     #waveformBuffer;
+    /** @type {GPUTexture | null} */
+    #waveformTextureMSAA;
+    /** @type {GPUTextureView | null} */
+    #waveformTextureMSAAView;
     /** @type {string | null} */
     #shaderMirrorCode;
     /** @type {GPUShaderModule | null} */
@@ -248,14 +252,24 @@ class WaveformVisualizer {
         // --- Optionally: create multisampled texture for antialiasing ---
         this.#displayTextureMSAA = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
-            sampleCount: 1, // make it 4 for multisampling
+            sampleCount: 4, // 4 for multisampling
             format: this.#canvasFormat,
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
 
         // Create waveform texture for first pass (offscreen)
+        this.#waveformTextureMSAA = this.#gpuDevice.createTexture({
+            size: [this.#canvas.width, this.#canvas.height],
+            sampleCount: 4,
+            format: this.#canvasFormat,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        this.#waveformTextureMSAAView = this.#waveformTextureMSAA.createView();
+
+// --- Resolved single-sample texture (to sample in mirror pass) ---
         this.#waveformTexture = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
+            sampleCount: 1,
             format: this.#canvasFormat,
             usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
         });
@@ -494,7 +508,7 @@ class WaveformVisualizer {
                     }],
                 },
                 primitive: {topology: "line-strip"},
-                multisample: {count: 1}, // make it 4 for multisampling
+                multisample: {count: 4}, // make it 4 for multisampling
             });
         }
     }
@@ -517,7 +531,8 @@ class WaveformVisualizer {
             // --- Pass 1: Render waveform into offscreen texture ---
             const pass1 = encoder.beginRenderPass({
                 colorAttachments: [{
-                    view: this.#waveformTextureView,
+                    view: this.#waveformTextureMSAAView,
+                    resolveTarget: this.#waveformTextureView,
                     loadOp: 'clear',
                     storeOp: 'store',
                     clearValue: {r: 0, g: 0, b: 0, a: 0},

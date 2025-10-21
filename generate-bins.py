@@ -19,7 +19,7 @@ def true_peak(segment, upsample=4):
 
 # Parameters
 num_channels = 16
-image_width = 5009  # target horizontal pixels
+image_width = 4096  # target horizontal pixels
 bit_depth = 12  # per value (peak or mean)
 dtype = np.uint16  # can hold 12-bit data
 
