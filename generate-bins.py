@@ -26,8 +26,8 @@ for x in range(image_width):
     # Peak amplitude per channel
     peak[x] = np.max(np.abs(segment), axis=0)
 
-    # Mean amplitude per channel
-    mean[x] = np.mean(np.abs(segment), axis=0)
+    # RMS amplitude per channel
+    mean[x] = np.sqrt(np.mean(segment.astype(np.float64)**2, axis=0))
 
 # Quantize to 12 bits
 max_val = 2**bit_depth - 1
