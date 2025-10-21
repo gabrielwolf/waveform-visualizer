@@ -15,45 +15,70 @@ import GpuContextManager from "./gpuContextManager.js";
 class WaveformVisualizer {
     static #instance = null;
 
-    /** @type {HTMLCanvasElement} */
+    /** @type {HTMLCanvasElement} Canvas element for waveform rendering */
     #canvas;
-    /** @type {GPUTextureFormat | null} */
+    /** @type {GPUTextureFormat | null} Canvas texture format */
     #canvasFormat;
-    /** @type {PredefinedColorSpace | null} */
+    /** @type {PredefinedColorSpace | null} Canvas color space */
     #canvasColorSpace;
-    /** @type {GPUTextureFormat | null} */
+    /** @type {GPUTextureFormat | null} Internal format for GPU textures */
     #internalFormat;
-
-    /** @type {GPUDevice | null} */
+    /** @type {GPUDevice | null} WebGPU device used for compute & render */
     #gpuDevice;
-    /** @type {GPUCanvasContext | null} */
+    /** @type {GPUCanvasContext | null} WebGPU canvas context */
     #context;
-    /** @type {string | null} */
-    #shaderWaveformCode;
-    /** @type {GPUShaderModule | null} */
-    #shaderWaveformModule;
 
-    /** @type {GPUBuffer | null} */
+    /** @type {string | null} WGSL shader code for compute waveform */
+    #shaderComputeWaveformCode;
+    /** @type {GPUShaderModule | null} Compiled compute shader module */
+    #shaderComputeWaveformModule;
+    /** @type {string | null} WGSL shader code for displaying output */
+    #shaderDisplayCode;
+    /** @type {GPUShaderModule | null} Compiled display shader module */
+    #shaderDisplayModule;
+
+
+
+    /** @type {GPUBuffer | null} Uniform buffer for parameters (time, boost, gamma, etc.) */
     #uniformBuffer;
-
-    /** @type {GPUTexture | null} */
+    /** @type {GPUTexture | null} MSAA texture for display */
     #displayTextureMSAA;
 
-    /** @type {number | null} */
+    /** @type {number | null} Visualization intensity */
     #boost;
-    /** @type {number | null} */
+    /** @type {number | null} Gamma correction */
     #gamma;
-    /** @type {number | null} */
+    /** @type {number | null} Smoothing factor for waveform */
     #smoothingFactor;
-    #timeBuffer;
-    #outputTexture;
-    #outputTextureView;
-    #computeBindGroupLayout;
-    #computePipeline;
-    #computeBindGroup;
-    #blitPipeline;
-    #blitBindGroup;
 
+    /** @type {number | null} Time parameter for compute shader */
+    #timeBuffer;
+    /** @type {GPUTexture | null} Compute texture for compute shader results */
+    #computeTexture;
+    /** @type {GPUTextureView | null} View of the output texture */
+    #computeTextureView;
+    /** @type {GPUComputePipeline | null} Compute pipeline for waveform generation */
+    #computePipeline;
+    /** @type {GPUBindGroupLayout | null} Compute shader bind group layout */
+    #computeBindGroupLayout;
+    /** @type {GPUBindGroup | null} Bind group linking buffers & textures for compute */
+    #computeBindGroup;
+
+    /** @type {GPUPipelineLayout | null} Pipeline layout for display */
+    #displayPipelineLayout;
+    /** @type {GPURenderPipeline | null} Render pipeline for display pass */
+    #displayPipeline;
+    /** @type {GPUBindGroupLayout | null} Bind group layout for display pipeline */
+    #displayBindGroupLayout;
+    /** @type {GPUBindGroup | null} Bind group for display pipeline */
+    #displayBindGroup;
+    /** @type {GPUSampler | null} Sampler used for display output texture */
+    #displaySampler;
+
+    /** @type {Float32Array | null} Normalized waveform data from binary file */
+    #waveformData;
+    /** @type {Float32Array | null} Normalized background or peak data */
+    #backgroundData;
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -105,7 +130,8 @@ class WaveformVisualizer {
         this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
         this.#canvasFormat = null;
         this.#canvasColorSpace = null;
-        this.#shaderWaveformCode = null;
+
+        this.#shaderComputeWaveformCode = null;
 
         this.#boost = 1.5;
         this.#gamma = 0.45;
@@ -137,7 +163,10 @@ class WaveformVisualizer {
         }
 
         (async () => {
-            this.#shaderWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
+            this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
+
+            this.#waveformData = await WaveformVisualizer.loadBinaryFile('./mean.bin');
+            this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./peak.bin');
 
             await this.#setupPipeline();
             this.updateUniformBuffer();
@@ -184,9 +213,9 @@ class WaveformVisualizer {
      * Sets up compute and rendering pipeline
      */
     async #setupPipeline() {
-        this.#shaderWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
-        this.#shaderWaveformModule = this.#gpuDevice.createShaderModule({
-            code: this.#shaderWaveformCode,
+        this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
+        this.#shaderComputeWaveformModule = this.#gpuDevice.createShaderModule({
+            code: this.#shaderComputeWaveformCode,
         });
 
         // Create uniform buffer (for time)
@@ -196,7 +225,7 @@ class WaveformVisualizer {
         });
 
         // Create output texture (storage + sampled)
-        this.#outputTexture = this.#gpuDevice.createTexture({
+        this.#computeTexture = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
             format: this.#canvasFormat,
             usage:
@@ -206,7 +235,7 @@ class WaveformVisualizer {
                 GPUTextureUsage.COPY_SRC,
         });
 
-        this.#outputTextureView = this.#outputTexture.createView();
+        this.#computeTextureView = this.#computeTexture.createView();
 
         // Compute bind group layout
         this.#computeBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
@@ -226,7 +255,7 @@ class WaveformVisualizer {
                 bindGroupLayouts: [this.#computeBindGroupLayout]
             }),
             compute: {
-                module: this.#shaderWaveformModule,
+                module: this.#shaderComputeWaveformModule,
                 entryPoint: "main",
             },
         });
@@ -234,26 +263,26 @@ class WaveformVisualizer {
         this.#computeBindGroup = this.#gpuDevice.createBindGroup({
             layout: this.#computeBindGroupLayout,
             entries: [
-                {binding: 0, resource: this.#outputTextureView},
+                {binding: 0, resource: this.#computeTextureView},
                 {binding: 1, resource: {buffer: this.#timeBuffer}},
             ],
         });
 
         // ------------ 2nd pass ------------
 
-        const blitShaderCode = await WaveformVisualizer.loadShader('./shaderBlit.wgsl');
-        const blitShaderModule = this.#gpuDevice.createShaderModule({
-            code: blitShaderCode,
+        this.#shaderDisplayCode = await WaveformVisualizer.loadShader('./shaderDisplay.wgsl');
+        this.#shaderDisplayModule = this.#gpuDevice.createShaderModule({
+            code: this.#shaderDisplayCode,
         });
 
         // Create sampler for sampling compute texture
-        const blitSampler = this.#gpuDevice.createSampler({
+        this.#displaySampler = this.#gpuDevice.createSampler({
             magFilter: 'linear',
             minFilter: 'linear',
         });
 
         // Create bind group layout for texture + sampler
-        const blitBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
+        this.#displayBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
             entries: [
                 {binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {}},
                 {binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
@@ -261,19 +290,19 @@ class WaveformVisualizer {
         });
 
         // Create pipeline layout
-        const blitPipelineLayout = this.#gpuDevice.createPipelineLayout({
-            bindGroupLayouts: [blitBindGroupLayout],
+        this.#displayPipelineLayout = this.#gpuDevice.createPipelineLayout({
+            bindGroupLayouts: [this.#displayBindGroupLayout],
         });
 
         // Create render pipeline
-        this.#blitPipeline = this.#gpuDevice.createRenderPipeline({
-            layout: blitPipelineLayout,
+        this.#displayPipeline = this.#gpuDevice.createRenderPipeline({
+            layout: this.#displayPipelineLayout,
             vertex: {
-                module: blitShaderModule,
+                module: this.#shaderDisplayModule,
                 entryPoint: 'vs_main',
             },
             fragment: {
-                module: blitShaderModule,
+                module: this.#shaderDisplayModule,
                 entryPoint: 'fs_main',
                 targets: [
                     {format: this.#canvasFormat},
@@ -283,11 +312,11 @@ class WaveformVisualizer {
         });
 
         // Create bind group linking compute texture + sampler
-        this.#blitBindGroup = this.#gpuDevice.createBindGroup({
-            layout: blitBindGroupLayout,
+        this.#displayBindGroup = this.#gpuDevice.createBindGroup({
+            layout: this.#displayBindGroupLayout,
             entries: [
-                {binding: 0, resource: this.#outputTextureView},
-                {binding: 1, resource: blitSampler},
+                {binding: 0, resource: this.#computeTextureView},
+                {binding: 1, resource: this.#displaySampler},
             ],
         });
     }
@@ -306,7 +335,7 @@ class WaveformVisualizer {
     #renderLoop() {
         let time = 0;
         const frame = () => {
-            if (!this.#gpuDevice || !this.#computePipeline || !this.#blitPipeline || !this.#outputTexture) {
+            if (!this.#gpuDevice || !this.#computePipeline || !this.#displayPipeline || !this.#computeTexture) {
                 requestAnimationFrame(frame);
                 return;
             }
@@ -325,7 +354,7 @@ class WaveformVisualizer {
             computePass.dispatchWorkgroups(workgroupsX, workgroupsY);
             computePass.end();
 
-            // --- Render pass (blit to canvas) ---
+            // --- Render pass (display to canvas) ---
             const renderPass = encoder.beginRenderPass({
                 colorAttachments: [{
                     view: this.#context.getCurrentTexture().createView(),
@@ -334,8 +363,8 @@ class WaveformVisualizer {
                     clearValue: {r: 0, g: 0, b: 0, a: 1},
                 }]
             });
-            renderPass.setPipeline(this.#blitPipeline);
-            renderPass.setBindGroup(0, this.#blitBindGroup);
+            renderPass.setPipeline(this.#displayPipeline);
+            renderPass.setBindGroup(0, this.#displayBindGroup);
             renderPass.draw(6, 1, 0, 0);
             renderPass.end();
 
