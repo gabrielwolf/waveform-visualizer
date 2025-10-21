@@ -38,29 +38,6 @@ class WaveformVisualizer {
 
     /** @type {GPUTexture | null} */
     #displayTextureMSAA;
-    /** @type {GPUTexture | null} */
-    #waveformTexture;
-    /** @type {GPUTextureView | null} */
-    #waveformTextureView;
-
-    /** @type {GPURenderPipeline | null} */
-    #pipeline;
-    /** @type {GPURenderPipeline | null} */
-    #mirrorPipeline;
-    /** @type {GPUShaderModule | null} */
-    #mirrorShaderModule;
-    /** @type {GPUBuffer | null} */
-    #fullscreenQuadBuffer;
-    /** @type {GPUBindGroupLayout | null} */
-    #mirrorBindGroupLayout;
-    /** @type {GPUBindGroup | null} */
-    #mirrorBindGroup;
-    /** @type {GPUPipelineLayout | null} Pipeline layout combining uniform and energy bind group layouts. */
-    #pipelineLayout;
-    /** @type {GPUBindGroup | null} */
-    #uniformBindGroup;
-    /** @type {GPUBindGroupLayout | null} */
-    #uniformBindGroupLayout;
 
     /** @type {number | null} */
     #boost;
@@ -69,29 +46,6 @@ class WaveformVisualizer {
     /** @type {number | null} */
     #smoothingFactor;
 
-    /** @type {Float32Array} */
-    #waveformData;
-    /** @type {GPUBuffer} */
-    #waveformBuffer;
-    /** @type {GPUTexture | null} */
-    #waveformTextureMSAA;
-    /** @type {GPUTextureView | null} */
-    #waveformTextureMSAAView;
-    /** @type {string | null} */
-    #shaderMirrorCode;
-    /** @type {GPUShaderModule | null} */
-    #shaderMirrorModule;
-    /** @type {number | null} */
-    #numVertices;
-    /** @type {GPUBuffer | null} */
-    #mirrorUniformBuffer;
-
-    /** @type {Float32Array} */
-    #backgroundData;
-    /** @type {GPUTexture | null} */
-    #backgroundTexture;
-    /** @type {GPUTextureView | null} */
-    #backgroundTextureView;
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -175,12 +129,7 @@ class WaveformVisualizer {
         }
 
         (async () => {
-            this.#shaderWaveformCode = await WaveformVisualizer.loadShader('./shaderWaveform.wgsl');
-            this.#shaderMirrorCode = await WaveformVisualizer.loadShader('./shaderMirror.wgsl');
-            this.#waveformData = await WaveformVisualizer.loadBinaryFile('./mean.bin');
-            this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./peak.bin');
-
-            this.#setupBackgroundTexture();
+            this.#shaderWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
 
             this.#setupPipeline();
             this.updateUniformBuffer();
@@ -200,369 +149,53 @@ class WaveformVisualizer {
         })();
     }
 
-    #setupBackgroundTexture() {
-        const numChannels = 16;
-        const numBins = this.#backgroundData.length / numChannels;
-
-        // For now, use channel 0 only
-        const grayscale = new Float32Array(numBins * 4); // RGBA
-        for (let i = 0; i < numBins; i++) {
-            const v = this.#backgroundData[i * numChannels]; // normalized 0..1
-            grayscale[i * 4 + 0] = v;
-            grayscale[i * 4 + 1] = v;
-            grayscale[i * 4 + 2] = v;
-            grayscale[i * 4 + 3] = 1.0;
-        }
-
-        this.#backgroundTexture = this.#gpuDevice.createTexture({
-            size: [numBins, 1],
-            format: "rgba16float",
-            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-        });
-
-        this.#gpuDevice.queue.writeTexture(
-            {texture: this.#backgroundTexture},
-            grayscale,
-            {bytesPerRow: numBins * 16}, // 4 channels * 4 bytes each
-            [numBins, 1]
-        );
-
-        this.#backgroundTextureView = this.#backgroundTexture.createView();
-    }
-
     /**
      * (Re)creates textures and updates bind groups on resize or format change.
      * @private
      */
     #resizeTextures() {
         // Guard against race condition with render loop
-        if (!this.#gpuDevice || !this.#pipeline) return;
+        if (!this.#gpuDevice) return;
 
         // --- Resize canvas to match client size ---
         this.#canvas.width = Math.max(1, this.#canvas.clientWidth);
         this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
 
         // Destroy old textures if present
-        this.#displayTextureMSAA?.destroy();
-        this.#waveformTexture?.destroy();
+        // this.#waveformTexture?.destroy();
 
-        // --- Create main render target texture ---
-        // this was present here in the dumme head and space visualizer
 
-        // --- Optionally: create multisampled texture for antialiasing ---
-        this.#displayTextureMSAA = this.#gpuDevice.createTexture({
-            size: [this.#canvas.width, this.#canvas.height],
-            sampleCount: 4, // 4 for multisampling
-            format: this.#canvasFormat,
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-        });
-
-        // Create waveform texture for first pass (offscreen)
-        this.#waveformTextureMSAA = this.#gpuDevice.createTexture({
-            size: [this.#canvas.width, this.#canvas.height],
-            sampleCount: 4,
-            format: this.#canvasFormat,
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-        });
-        this.#waveformTextureMSAAView = this.#waveformTextureMSAA.createView();
-
-// --- Resolved single-sample texture (to sample in mirror pass) ---
-        this.#waveformTexture = this.#gpuDevice.createTexture({
-            size: [this.#canvas.width, this.#canvas.height],
-            sampleCount: 1,
-            format: this.#canvasFormat,
-            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-        });
-        this.#waveformTextureView = this.#waveformTexture.createView();
-
-        const resolution = new Float32Array([this.#canvas.width, this.#canvas.height]);
-        if (this.#mirrorUniformBuffer) {
-            this.#gpuDevice.queue.writeBuffer(this.#mirrorUniformBuffer, 0, resolution.buffer);
-        }
+        // Placeholder for future compute texture setup
+        // (In new compute-based approach, setup output textures here if needed)
+        // TODO: Create/resize output textures for compute pass here if needed
 
         // Recreate bind groups if needed
         this.#setupBindGroups();
-        this.#setupMirrorBindGroup();
     }
 
     /**
-     * Creates shader modules, buffers, and initializes the render pipeline.
+     * Sets up compute and rendering pipeline (stub for compute-based approach).
      * @private
      */
     #setupPipeline() {
-        this.#shaderWaveformModule = this.#gpuDevice.createShaderModule({
-            code: this.#shaderWaveformCode
-        });
-
-        this.#shaderMirrorModule = this.#gpuDevice.createShaderModule({
-            code: this.#shaderMirrorCode
-        });
-
-        const uniformData = new Float32Array([this.#boost, this.#gamma, 0, 0]);
-        this.#uniformBuffer = this.#gpuDevice.createBuffer({
-            size: uniformData.byteLength, // 16 bytes (4 floats)
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-        this.#gpuDevice.queue.writeBuffer(this.#uniformBuffer, 0, uniformData.buffer, uniformData.byteOffset, uniformData.byteLength);
-
-        // Create uniform bind group layout for uniform buffer and model matrix
-        this.#uniformBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
-            entries: [
-                {binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: {type: "uniform"}},
-            ],
-        });
-
-        // Create pipeline layout using uniform bind group layouts. We'll patch pipeline in #setupBindGroups
-        this.#pipelineLayout = null;
-
-
-        // --- Setup mirror pipeline and fullscreen quad ---
-        // Create shader module for mirror pass
-
-        this.#mirrorShaderModule = this.#gpuDevice.createShaderModule({
-            code: this.#shaderMirrorCode,
-        });
-
-        // Fullscreen quad vertex buffer: 2D position and UV
-        // 2 triangles (triangle strip): positions [-1,1] and [0,0]-[1,1]
-        const quadVertices = new Float32Array([
-            //  position   uv
-            -1, -1, 0, 0,
-            1, -1, 1, 0,
-            -1, 1, 0, 1,
-            1, 1, 1, 1,
-        ]);
-        this.#fullscreenQuadBuffer = this.#gpuDevice.createBuffer({
-            size: quadVertices.byteLength,
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: true,
-        });
-        new Float32Array(this.#fullscreenQuadBuffer.getMappedRange()).set(quadVertices);
-        this.#fullscreenQuadBuffer.unmap();
-
-        // Mirror bind group layout
-        this.#mirrorBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
-            entries: [
-                {binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {}},
-                {binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
-                {binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: {type: "uniform"}},
-                {binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: {}},
-            ]
-        });
-
-        // Mirror pipeline layout
-        const mirrorPipelineLayout = this.#gpuDevice.createPipelineLayout({
-            bindGroupLayouts: [this.#mirrorBindGroupLayout]
-        });
-        this.#mirrorPipeline = this.#gpuDevice.createRenderPipeline({
-            layout: mirrorPipelineLayout,
-            vertex: {
-                module: this.#mirrorShaderModule,
-                entryPoint: "vs_fullscreen",
-                buffers: [
-                    {
-                        arrayStride: 16,
-                        attributes: [
-                            {shaderLocation: 0, offset: 0, format: "float32x2"}, // position
-                            {shaderLocation: 1, offset: 8, format: "float32x2"}, // uv
-                        ]
-                    }
-                ]
-            },
-            fragment: {
-                module: this.#mirrorShaderModule,
-                entryPoint: "fs_mirror",
-                targets: [{
-                    format: this.#canvasFormat,
-                    blend: {
-                        color: {
-                            srcFactor: 'src-alpha',
-                            dstFactor: 'one-minus-src-alpha',
-                            operation: 'add',
-                        },
-                        alpha: {
-                            srcFactor: 'one',
-                            dstFactor: 'one-minus-src-alpha',
-                            operation: 'add',
-                        }
-                    }
-                }]
-            },
-            primitive: {topology: "triangle-strip"},
-            multisample: {count: 1}
-        });
-    }
-
-    #setupMirrorBindGroup() {
-        if (!this.#waveformTextureView || !this.#mirrorBindGroupLayout) return;
-
-        // Create a sampler for use in the mirror pass
-        const sampler = this.#gpuDevice.createSampler({
-            magFilter: 'linear',
-            minFilter: 'linear',
-        });
-
-        // --- Create resolution uniform buffer ---
-        const resolution = new Float32Array([this.#canvas.width, this.#canvas.height]);
-        this.#mirrorUniformBuffer = this.#gpuDevice.createBuffer({
-            size: resolution.byteLength,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-        this.#gpuDevice.queue.writeBuffer(this.#mirrorUniformBuffer, 0, resolution.buffer, resolution.byteOffset, resolution.byteLength);
-
-        // --- Create bind group including texture, sampler, and resolution uniform ---
-        this.#mirrorBindGroup = this.#gpuDevice.createBindGroup({
-            layout: this.#mirrorBindGroupLayout,
-            entries: [
-                {binding: 0, resource: this.#waveformTextureView},
-                {binding: 1, resource: sampler},
-                {binding: 2, resource: {buffer: this.#mirrorUniformBuffer}},
-                {binding: 3, resource: this.#backgroundTextureView},
-            ]
-        });
+        // In compute-based approach, setup compute pipeline and related buffers here.
+        // This is a stub placeholder.
     }
 
     /**
-     * Sets up bind groups linking uniform buffers/model matrix and energy/LUT data for lighting.
+     * Sets up bind groups (stub for compute-based approach).
      */
     #setupBindGroups() {
-        if (!this.#uniformBuffer || !this.#uniformBindGroupLayout) return;
-
-        // Uniform bind group
-        this.#uniformBindGroup = this.#gpuDevice.createBindGroup({
-            layout: this.#uniformBindGroupLayout,
-            entries: [
-                {binding: 0, resource: {buffer: this.#uniformBuffer}},
-            ],
-        });
-
-        if (this.#waveformData) {
-            const numChannels = 16;
-            const numBins = this.#waveformData.length / numChannels;
-            this.#numVertices = numBins * 2; // 2 vertices per bin
-
-            const vertexData = new Float32Array(numBins * 4); // (x,y) + (x,baseline)
-            for (let i = 0; i < numBins; i++) {
-                const x = (i / (numBins - 1)) * 2 - 1; // full width
-                const y = this.#waveformData[i * numChannels]; // normalized 0..1
-
-                // top vertex (waveform)
-                vertexData[i * 4 + 0] = x;
-                vertexData[i * 4 + 1] = y;
-
-                // bottom vertex (baseline)
-                vertexData[i * 4 + 2] = x;
-                vertexData[i * 4 + 3] = 0.0; // since we now mirror, center baseline at 0
-            }
-
-            this.#waveformBuffer = this.#gpuDevice.createBuffer({
-                size: vertexData.byteLength,
-                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-                mappedAtCreation: true
-            });
-            new Float32Array(this.#waveformBuffer.getMappedRange()).set(vertexData);
-            this.#waveformBuffer.unmap();
-        }
-
-        // Now create pipeline layout and pipeline if not already created
-        if (!this.#pipeline) {
-            this.#pipelineLayout = this.#gpuDevice.createPipelineLayout({
-                bindGroupLayouts: [this.#uniformBindGroupLayout]
-            });
-            // Main mesh pipeline
-            this.#pipeline = this.#gpuDevice.createRenderPipeline({
-                layout: this.#pipelineLayout,
-                vertex: {
-                    module: this.#shaderWaveformModule,
-                    entryPoint: "vs_head",
-                    buffers: [
-                        {
-                            arrayStride: 8, // two floats per vertex (2 * 4 bytes)
-                            attributes: [
-                                {
-                                    shaderLocation: 0, // matches @location(0)
-                                    offset: 0,
-                                    format: "float32x2"
-                                }
-                            ]
-                        }
-                    ]
-                },
-                fragment: {
-                    module: this.#shaderWaveformModule,
-                    entryPoint: "fs_head",
-                    targets: [{
-                        format: this.#canvasFormat,
-                        blend: {
-                            color: {
-                                srcFactor: 'src-alpha',
-                                dstFactor: 'one-minus-src-alpha',
-                                operation: 'add',
-                            },
-                            alpha: {
-                                srcFactor: 'one',
-                                dstFactor: 'one-minus-src-alpha',
-                                operation: 'add',
-                            }
-                        }
-                    }],
-                },
-                primitive: {topology: "line-strip"},
-                multisample: {count: 4}, // make it 4 for multisampling
-            });
-        }
+        // In compute-based approach, setup compute and render bind groups here.
+        // This is a stub placeholder.
     }
 
     /**
-     * Main render loop.
-     * Pass 1: Draw waveform to offscreen texture.
-     * Pass 2: Draw mirrored quad using that texture to swap chain.
+     * Main render loop (stub for compute-based approach).
      */
     #renderLoop() {
-        const frame = () => {
-            if (!this.#waveformTexture || !this.#mirrorPipeline || !this.#fullscreenQuadBuffer || !this.#mirrorBindGroup || !this.#waveformBuffer) {
-                requestAnimationFrame(frame);
-                return;
-            }
-
-            // --- Begin encoding commands for this frame ---
-            const encoder = this.#gpuDevice.createCommandEncoder();
-
-            // --- Pass 1: Render waveform into offscreen texture ---
-            const pass1 = encoder.beginRenderPass({
-                colorAttachments: [{
-                    view: this.#waveformTextureMSAAView,
-                    resolveTarget: this.#waveformTextureView,
-                    loadOp: 'clear',
-                    storeOp: 'store',
-                    clearValue: {r: 0, g: 0, b: 0, a: 0},
-                }],
-            });
-            pass1.setPipeline(this.#pipeline);
-            pass1.setBindGroup(0, this.#uniformBindGroup);
-            pass1.setVertexBuffer(0, this.#waveformBuffer);
-            pass1.draw(this.#numVertices, 1, 0, 0);
-            pass1.end();
-
-            // --- Pass 2: Draw mirrored quad to swap chain ---
-            const pass2 = encoder.beginRenderPass({
-                colorAttachments: [{
-                    view: this.#context.getCurrentTexture().createView(),
-                    loadOp: 'clear',
-                    storeOp: 'store',
-                    clearValue: {r: 0, g: 0, b: 0, a: 0},
-                }],
-            });
-            pass2.setPipeline(this.#mirrorPipeline);
-            pass2.setBindGroup(0, this.#mirrorBindGroup);
-            pass2.setVertexBuffer(0, this.#fullscreenQuadBuffer);
-            pass2.draw(4, 1, 0, 0);
-            pass2.end();
-
-            this.#gpuDevice.queue.submit([encoder.finish()]);
-            requestAnimationFrame(frame);
-        };
-        requestAnimationFrame(frame);
+        // In compute-based approach, perform compute pass and present result here.
+        // This is a stub placeholder.
     }
 
     /**
