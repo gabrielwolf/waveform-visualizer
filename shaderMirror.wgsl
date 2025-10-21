@@ -32,16 +32,16 @@ fn fs_mirror(input: VertexOutput) -> @location(0) vec4f {
     let mirroredUv = vec2f(uv.x, clamp(1.0 - uv.y - pixelOffset, 0.0, 1.0));
 
     // Compute the mask from the waveform
-    let maskColor = max(
+    let mask = max(
         textureSampleLevel(waveformTexture, waveformSampler, uv, 0.0),
         textureSampleLevel(waveformTexture, waveformSampler, mirroredUv, 0.0)
     );
 
     // Sample greyscale value from background texture (peak.bin)
-    let peakSample = textureSampleLevel(backgroundTexture, waveformSampler, vec2f(uv.x, 0.5), 0.0).g;
+    let waveformSample = textureSampleLevel(backgroundTexture, waveformSampler, vec2f(uv.x, 0.5), 0.0).g * 1.65 - 2.0;
 
     // Scale down for safety (optional)
-    let greyValue = peakSample * maskColor.a * 0.45;
+    let greyValue = waveformSample * mask.a;
 
     // Return greyscale
     return vec4f(greyValue, greyValue, greyValue, 1.0);

@@ -204,9 +204,9 @@ class WaveformVisualizer {
         const grayscale = new Float32Array(numBins * 4); // RGBA
         for (let i = 0; i < numBins; i++) {
             const v = this.#backgroundData[i * numChannels]; // normalized 0..1
-            grayscale[i * 4 + 0] = v * 4.0; // stretch to 0..4 brightness
-            grayscale[i * 4 + 1] = v * 4.0;
-            grayscale[i * 4 + 2] = v * 4.0;
+            grayscale[i * 4 + 0] = v;
+            grayscale[i * 4 + 1] = v;
+            grayscale[i * 4 + 2] = v;
             grayscale[i * 4 + 3] = 1.0;
         }
 
