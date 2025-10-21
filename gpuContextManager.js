@@ -92,23 +92,25 @@ class GpuContextManager {
             const dynamicRange = highDynamicRange ? "high" : "standard";
             console.log(`HDR/SDR change detected, dynamicRange: ${dynamicRange}`);
 
-            for (const callback of this.#listeners) {
-                callback(this.#context);
-            }
+            if (this.#context) {
+                for (const callback of this.#listeners) {
+                    callback(this.#context);
+                }
 
-            for (const canvas of this.#canvases) {
-                try {
-                    const context = GpuContextManager.#instance.configureCanvas(canvas);
-                    let identifier = canvas.dataset?.role || canvas.id || canvas.className || "<unnamed canvas>";
-                    console.log(
-                        `Reconfig done for canvas [${identifier}]`,
-                        GpuContextManager.#instance.context.format,
-                        GpuContextManager.#instance.context.colorSpace,
-                        dynamicRange
-                    );
-                } catch (error) {
-                    let identifier = canvas.dataset?.role || canvas.id || canvas.className || "<unnamed canvas>";
-                    console.warn(`Reconfigure failed after HDR/SDR switch for canvas [${identifier}]:`, error);
+                for (const canvas of this.#canvases) {
+                    try {
+                        const context = GpuContextManager.#instance.configureCanvas(canvas);
+                        let identifier = canvas.dataset?.role || canvas.id || canvas.className || "<unnamed canvas>";
+                        console.log(
+                            `Reconfig done for canvas [${identifier}]`,
+                            GpuContextManager.#instance.context.format,
+                            GpuContextManager.#instance.context.colorSpace,
+                            dynamicRange
+                        );
+                    } catch (error) {
+                        let identifier = canvas.dataset?.role || canvas.id || canvas.className || "<unnamed canvas>";
+                        console.warn(`Reconfigure failed after HDR/SDR switch for canvas [${identifier}]:`, error);
+                    }
                 }
             }
         });
