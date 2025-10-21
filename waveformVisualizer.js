@@ -82,6 +82,12 @@ class WaveformVisualizer {
     /** @type {GPUBuffer | null} */
     #mirrorUniformBuffer;
 
+    /** @type {Float32Array} */
+    #backgroundData;
+    /** @type {GPUTexture | null} */
+    #backgroundTexture;
+    /** @type {GPUTextureView | null} */
+    #backgroundTextureView;
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -168,6 +174,9 @@ class WaveformVisualizer {
             this.#shaderWaveformCode = await WaveformVisualizer.loadShader('./shaderWaveform.wgsl');
             this.#shaderMirrorCode = await WaveformVisualizer.loadShader('./shaderMirror.wgsl');
             this.#waveformData = await WaveformVisualizer.loadBinaryFile('./mean.bin');
+            this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./peak.bin');
+
+            this.#setupBackgroundTexture();
 
             this.#setupPipeline();
             this.updateUniformBuffer();
@@ -187,20 +196,34 @@ class WaveformVisualizer {
         })();
     }
 
-    /**
-     * Helper for creating a 2D GPU texture.
-     * @param {number} width - Width of the texture in pixels.
-     * @param {number} height - Height of the texture in pixels.
-     * @param {GPUTextureFormat} format - Format of the texture (e.g., "rgba8unorm").
-     * @param {GPUTextureUsageFlags} usage - Usage flags for the texture.
-     * @returns {GPUTexture} The created GPU texture.
-     */
-    #createTexture(width, height, format, usage) {
-        return this.#gpuDevice.createTexture({
-            size: [width, height],
-            format: format,
-            usage: usage
+    #setupBackgroundTexture() {
+        const numChannels = 16;
+        const numBins = this.#backgroundData.length / numChannels;
+
+        // For now, use channel 0 only
+        const grayscale = new Float32Array(numBins * 4); // RGBA
+        for (let i = 0; i < numBins; i++) {
+            const v = this.#backgroundData[i * numChannels]; // normalized 0..1
+            grayscale[i * 4 + 0] = v * 4.0; // stretch to 0..4 brightness
+            grayscale[i * 4 + 1] = v * 4.0;
+            grayscale[i * 4 + 2] = v * 4.0;
+            grayscale[i * 4 + 3] = 1.0;
+        }
+
+        this.#backgroundTexture = this.#gpuDevice.createTexture({
+            size: [numBins, 1],
+            format: "rgba16float",
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
         });
+
+        this.#gpuDevice.queue.writeTexture(
+            {texture: this.#backgroundTexture},
+            grayscale,
+            {bytesPerRow: numBins * 16}, // 4 channels * 4 bytes each
+            [numBins, 1]
+        );
+
+        this.#backgroundTextureView = this.#backgroundTexture.createView();
     }
 
     /**
@@ -309,6 +332,7 @@ class WaveformVisualizer {
                 {binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {}},
                 {binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
                 {binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: {type: "uniform"}},
+                {binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: {}},
             ]
         });
 
@@ -379,6 +403,7 @@ class WaveformVisualizer {
                 {binding: 0, resource: this.#waveformTextureView},
                 {binding: 1, resource: sampler},
                 {binding: 2, resource: {buffer: this.#mirrorUniformBuffer}},
+                {binding: 3, resource: this.#backgroundTextureView},
             ]
         });
     }

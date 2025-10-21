@@ -15,6 +15,7 @@ struct Uniforms {
 @group(0) @binding(0) var waveformTexture: texture_2d<f32>;
 @group(0) @binding(1) var waveformSampler: sampler;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+@group(0) @binding(3) var backgroundTexture: texture_2d<f32>;
 
 @vertex
 fn vs_fullscreen(input: VertexInput) -> VertexOutput {
@@ -30,8 +31,18 @@ fn fs_mirror(input: VertexOutput) -> @location(0) vec4f {
     let pixelOffset = 1.0 / uniforms.resolution.y;
     let mirroredUv = vec2f(uv.x, clamp(1.0 - uv.y - pixelOffset, 0.0, 1.0));
 
-    let color = textureSampleLevel(waveformTexture, waveformSampler, uv, 0.0);
-    let mirroredColor = textureSampleLevel(waveformTexture, waveformSampler, mirroredUv, 0.0);
+    // Compute the mask from the waveform
+    let maskColor = max(
+        textureSampleLevel(waveformTexture, waveformSampler, uv, 0.0),
+        textureSampleLevel(waveformTexture, waveformSampler, mirroredUv, 0.0)
+    );
 
-    return max(color, mirroredColor);
+    // Sample greyscale value from background texture (peak.bin)
+    let peakSample = textureSampleLevel(backgroundTexture, waveformSampler, vec2f(uv.x, 0.5), 0.0).g;
+
+    // Scale down for safety (optional)
+    let greyValue = peakSample * maskColor.a * 0.5;
+
+    // Return greyscale
+    return vec4f(greyValue, greyValue, greyValue, 1.0);
 }
