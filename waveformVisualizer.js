@@ -77,6 +77,7 @@ class WaveformVisualizer {
     #shaderMirrorCode;
     /** @type {GPUShaderModule | null} */
     #shaderMirrorModule;
+    #numVertices;
 
 
     static async loadShader(url) {
@@ -376,11 +377,15 @@ class WaveformVisualizer {
         });
 
         if (this.#waveformData) {
-            const sampleCount = this.#waveformData.length;
-            const vertexData = new Float32Array(sampleCount * 2);
-            for (let i = 0; i < sampleCount; i++) {
-                vertexData[i * 2] = (i / (sampleCount - 1)) * 4 - 1; // x: -1 → 1
-                vertexData[i * 2 + 1] = this.#waveformData[i];       // y: audio sample
+            const numChannels = 16;
+            const numBins = this.#waveformData.length / numChannels;
+            this.#numVertices = numBins;
+            const vertexData = new Float32Array(numBins * 2);
+            for (let i = 0; i < numBins; i++) {
+                // take first channel only (index i * numChannels)
+                const value = this.#waveformData[i * numChannels];
+                vertexData[i * 2] = (i / (numBins - 1)) * 2 - 1; // full width
+                vertexData[i * 2 + 1] = value;                   // normalized 0..1
             }
             this.#waveformBuffer = this.#gpuDevice.createBuffer({
                 size: vertexData.byteLength,
@@ -467,7 +472,7 @@ class WaveformVisualizer {
             pass1.setPipeline(this.#pipeline);
             pass1.setBindGroup(0, this.#uniformBindGroup);
             pass1.setVertexBuffer(0, this.#waveformBuffer);
-            pass1.draw(this.#waveformData.length / 2, 1, 0, 0);
+            pass1.draw(this.#numVertices, 1, 0, 0);
             pass1.end();
 
             // --- Pass 2: Draw mirrored quad to swap chain ---
