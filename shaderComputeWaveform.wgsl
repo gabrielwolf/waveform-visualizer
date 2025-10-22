@@ -28,7 +28,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let y_wave = 1.0 - value; // flip if needed
     let line_thickness = 0.005;
 
-    if (localY > y_wave) {
+    if (localY > y_wave || abs(localY - y_wave) < 0.017) {
         color = vec4f(1.0, 1.0, 1.0, 1.0);
     }
 
