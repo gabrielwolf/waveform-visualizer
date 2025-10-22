@@ -75,8 +75,11 @@ class WaveformVisualizer {
 
     /** @type {Float32Array | null} Normalized waveform data from binary file */
     #waveformData;
+    /** @type {GPUBuffer | null} */
+    #waveformBuffer;
     /** @type {Float32Array | null} Normalized background or peak data */
     #backgroundData;
+
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -257,6 +260,12 @@ class WaveformVisualizer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
+        this.#waveformBuffer = this.#gpuDevice.createBuffer({
+            size: this.#waveformData.byteLength,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        });
+        this.#gpuDevice.queue.writeBuffer(this.#waveformBuffer, 0, this.#waveformData);
+
         // Create output texture (storage + sampled)
         this.#computeTexture = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
@@ -278,6 +287,7 @@ class WaveformVisualizer {
                     storageTexture: {access: "write-only", format: this.#canvasFormat}
                 },
                 {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}},
+                {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}},
             ]
         });
 
@@ -360,6 +370,7 @@ class WaveformVisualizer {
             entries: [
                 {binding: 0, resource: this.#computeTextureView},
                 {binding: 1, resource: {buffer: this.#timeBuffer}},
+                {binding: 2, resource: {buffer: this.#waveformBuffer}},
             ],
         });
 
