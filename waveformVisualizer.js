@@ -93,12 +93,7 @@ class WaveformVisualizer {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to load binary file: ${url}`);
         const arrayBuffer = await response.arrayBuffer();
-        const raw = new Uint16Array(arrayBuffer);
-        const normalized = new Float32Array(raw.length);
-        for (let i = 0; i < raw.length; i++) {
-            normalized[i] = (raw[i] / 4095) * 1; // 12-bit -> [0,1]
-        }
-        return normalized;
+        return new Float32Array(arrayBuffer);
     }
 
     /**
