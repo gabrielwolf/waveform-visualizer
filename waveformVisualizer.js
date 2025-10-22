@@ -37,8 +37,6 @@ class WaveformVisualizer {
     /** @type {GPUShaderModule | null} Compiled display shader module */
     #shaderDisplayModule;
 
-
-
     /** @type {GPUBuffer | null} Uniform buffer for parameters (time, boost, gamma, etc.) */
     #uniformBuffer;
     /** @type {GPUTexture | null} MSAA texture for display */
@@ -197,13 +195,16 @@ class WaveformVisualizer {
         this.#canvas.width = Math.max(1, this.#canvas.clientWidth);
         this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
 
-        // Destroy old textures if present
-        // this.#waveformTexture?.destroy();
+        // Destroy old MSAA texture
+        this.#displayTextureMSAA?.destroy();
 
-
-        // Placeholder for future compute texture setup
-        // (In new compute-based approach, setup output textures here if needed)
-        // TODO: Create/resize output textures for compute pass here if needed
+        // Create new MSAA texture
+        this.#displayTextureMSAA = this.#gpuDevice.createTexture({
+            size: [this.#canvas.width, this.#canvas.height],
+            sampleCount: 4, // or 2 if you want lower MSAA
+            format: this.#canvasFormat,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
 
         // Recreate bind groups if needed
         this.#setupBindGroups();
@@ -221,6 +222,12 @@ class WaveformVisualizer {
         // Create uniform buffer (for time)
         this.#timeBuffer = this.#gpuDevice.createBuffer({
             size: 4,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        // Uniform buffer for display parameters (boost, gamma, smoothing)
+        this.#uniformBuffer = this.#gpuDevice.createBuffer({
+            size: 16, // 4 floats * 4 bytes
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
@@ -309,6 +316,9 @@ class WaveformVisualizer {
                 ],
             },
             primitive: {topology: 'triangle-list'},
+            multisample: {
+                count: 4,
+            }
         });
 
         // Create bind group linking compute texture + sampler
@@ -335,7 +345,11 @@ class WaveformVisualizer {
     #renderLoop() {
         let time = 0;
         const frame = () => {
-            if (!this.#gpuDevice || !this.#computePipeline || !this.#displayPipeline || !this.#computeTexture) {
+            // console.log(this.checkWaveformVisualizerResources());
+
+            if (!this.#gpuDevice || !this.#computePipeline || !this.#computeBindGroup || !this.#displayPipeline
+                || !this.#displayBindGroup || !this.#computeTexture || !this.#computeTextureView
+                || !this.#displayTextureMSAA || !this.#uniformBuffer || !this.#timeBuffer) {
                 requestAnimationFrame(frame);
                 return;
             }
@@ -357,7 +371,8 @@ class WaveformVisualizer {
             // --- Render pass (display to canvas) ---
             const renderPass = encoder.beginRenderPass({
                 colorAttachments: [{
-                    view: this.#context.getCurrentTexture().createView(),
+                    view: this.#displayTextureMSAA.createView(),
+                    resolveTarget: this.#context.getCurrentTexture().createView(),
                     loadOp: 'clear',
                     storeOp: 'store',
                     clearValue: {r: 0, g: 0, b: 0, a: 1},
@@ -372,6 +387,48 @@ class WaveformVisualizer {
             requestAnimationFrame(frame);
         };
         requestAnimationFrame(frame);
+    }
+
+    checkWaveformVisualizerResources() {
+        const varsToCheck = {
+            '#canvas': this.#canvas,
+            '#canvasFormat': this.#canvasFormat,
+            '#canvasColorSpace': this.#canvasColorSpace,
+            '#internalFormat': this.#internalFormat,
+            '#gpuDevice': this.#gpuDevice,
+            '#context': this.#context,
+            '#shaderComputeWaveformCode': this.#shaderComputeWaveformCode,
+            '#shaderComputeWaveformModule': this.#shaderComputeWaveformModule,
+            '#shaderDisplayCode': this.#shaderDisplayCode,
+            '#shaderDisplayModule': this.#shaderDisplayModule,
+            '#uniformBuffer': this.#uniformBuffer,
+            '#displayTextureMSAA': this.#displayTextureMSAA,
+            '#boost': this.#boost,
+            '#gamma': this.#gamma,
+            '#smoothingFactor': this.#smoothingFactor,
+            '#timeBuffer': this.#timeBuffer,
+            '#computeTexture': this.#computeTexture,
+            '#computeTextureView': this.#computeTextureView,
+            '#computePipeline': this.#computePipeline,
+            '#computeBindGroupLayout': this.#computeBindGroupLayout,
+            '#computeBindGroup': this.#computeBindGroup,
+            '#displayPipelineLayout': this.#displayPipelineLayout,
+            '#displayPipeline': this.#displayPipeline,
+            '#displayBindGroupLayout': this.#displayBindGroupLayout,
+            '#displayBindGroup': this.#displayBindGroup,
+            '#displaySampler': this.#displaySampler,
+            '#waveformData': this.#waveformData,
+            '#backgroundData': this.#backgroundData,
+        };
+
+        const missing = [];
+        for (const [name, value] of Object.entries(varsToCheck)) {
+            if (value === null || value === undefined) {
+                missing.push(name);
+            }
+        }
+
+        return missing;
     }
 
     /**
