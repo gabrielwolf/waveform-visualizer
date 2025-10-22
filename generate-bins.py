@@ -1,6 +1,10 @@
 import numpy as np
 from scipy.signal import resample
 
+num_channels = 16
+image_width = 4096  # target horizontal pixels
+input_file = "output.raw"
+
 def true_peak(segment, upsample=4):
     """
     segment: (N, num_channels)
@@ -27,12 +31,8 @@ def perceptual_scale(x, mode="sqrt"):
     else:  # lin
         return np.abs(x)
 
-# Parameters
-num_channels = 16
-image_width = 4096  # target horizontal pixels
-
 # Read raw PCM
-raw = np.fromfile("output.raw", dtype=np.float32)
+raw = np.fromfile(input_file, dtype=np.float32)
 num_samples = len(raw) // num_channels
 raw = raw.reshape((num_samples, num_channels))
 
