@@ -28,8 +28,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let y_wave = 1.0 - value; // flip if needed
     let line_thickness = 0.005;
 
-    if (abs(localY - y_wave) < line_thickness) {
-        // give each channel a distinct tint for debugging
+    if (localY > y_wave) {
         color = vec4f(1.0, 1.0, 1.0, 1.0);
     }
 
