@@ -28,8 +28,8 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     var color = vec4f(0.0);
 
     // Waveform fill: everything below the waveform line
-    let y_wave = 1.0 - value; // or 1.0 - value if you flipped Y
-    if (localY > y_wave) {
+    let y_wave = 0.5 - value * 0.5; // or 1.0 - value if you flipped Y
+    if (localY > y_wave && localY < 0.5) {
         color = vec4f(1.0, 1.0, 1.0, 1.0);
     }
 
