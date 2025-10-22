@@ -26,10 +26,20 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let value = waveform[waveformIndex];
 
     var color = vec4f(0.0);
-    let y_wave = 1.0 - value; // flip if needed
-    let line_thickness = 0.005;
 
-    if (localY > y_wave || abs(localY - y_wave) < 0.017) {
+    // Waveform fill: everything below the waveform line
+    let y_wave = 1.0 - value; // or 1.0 - value if you flipped Y
+    if (localY > y_wave) {
+        color = vec4f(1.0, 1.0, 1.0, 1.0);
+    }
+
+    // 1-pixel horizontal baseline for each channel
+    let pixelHeight = (1.0 / f32(dims.y)) / channelHeight;
+    let lineCenter = 0.5;
+    let y_start = lineCenter - pixelHeight * 0.5;
+    let y_end   = lineCenter + pixelHeight * 0.5;
+
+    if (localY >= y_start && localY <= y_end) {
         color = vec4f(1.0, 1.0, 1.0, 1.0);
     }
 
