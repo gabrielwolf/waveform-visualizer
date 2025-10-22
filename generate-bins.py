@@ -17,6 +17,16 @@ def true_peak(segment, upsample=4):
 
     return true_peaks
 
+def perceptual_scale(x, mode="sqrt"):
+    if mode == "log":
+        return np.log10(1 + np.abs(x)) / np.log10(1 + 1)
+    elif mode == "sqrt":
+        return np.sqrt(np.abs(x))
+    elif mode == "cbrt":
+        return np.cbrt(np.abs(x))
+    else:  # lin
+        return np.abs(x)
+
 # Parameters
 num_channels = 16
 image_width = 4096  # target horizontal pixels
@@ -49,6 +59,7 @@ for x in range(image_width):
 
     # RMS amplitude per channel
     mean[x] = np.sqrt(np.mean(segment.astype(np.float32)**2, axis=0))
+    mean[x] = perceptual_scale(mean[x], mode="sqrt")
 
 # Save as float32 binary files
 peak.astype(np.float32).tofile("peak.bin")
