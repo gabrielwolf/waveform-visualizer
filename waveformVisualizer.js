@@ -190,8 +190,6 @@ class WaveformVisualizer {
             this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
 
             this.#waveformData = await WaveformVisualizer.loadBinaryFile('./mean.bin');
-
-
             this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./peak.bin');
 
             await this.#setupPipeline();
