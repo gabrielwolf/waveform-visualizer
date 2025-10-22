@@ -15,6 +15,8 @@ import GpuContextManager from "./gpuContextManager.js";
 class WaveformVisualizer {
     static #instance = null;
 
+    /** @type {number | null} On HiDpi monitors 2 or 3, like Apple Retina displays */
+    #devicePixelRatio;
     /** @type {HTMLCanvasElement} Canvas element for waveform rendering */
     #canvas;
     /** @type {GPUTextureFormat | null} Canvas texture format */
@@ -125,9 +127,10 @@ class WaveformVisualizer {
         if (!canvas) {
             throw new Error("Waveform Visualizer: canvas not found.");
         }
+        this.#devicePixelRatio = window.devicePixelRatio || 1;
         this.#canvas = /** @type {HTMLCanvasElement} */ (canvas);
-        this.#canvas.width = Math.max(1, this.#canvas.clientWidth);
-        this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
+        this.#canvas.width = Math.max(1, Math.floor(this.#canvas.clientWidth * this.#devicePixelRatio));
+        this.#canvas.height = Math.max(1, Math.floor(this.#canvas.clientHeight * this.#devicePixelRatio));
         this.#canvasFormat = null;
         this.#canvasColorSpace = null;
         this.#internalFormat = null;
@@ -216,8 +219,8 @@ class WaveformVisualizer {
         // Guard against race condition with render loop
         if (!this.#gpuDevice) return;
 
-        this.#canvas.width = Math.max(1, this.#canvas.clientWidth);
-        this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
+        this.#canvas.width = Math.max(1, Math.floor(this.#canvas.clientWidth * this.#devicePixelRatio));
+        this.#canvas.height = Math.max(1, Math.floor(this.#canvas.clientHeight * this.#devicePixelRatio));
 
         this.#computeTexture?.destroy();
         this.#displayTextureMSAA?.destroy();
