@@ -148,6 +148,7 @@ class WaveformVisualizer {
             this.#canvasColorSpace = context.colorSpace;
             this.#internalFormat = context.internalFormat;
 
+            this.#computeTexture?.destroy();
             this.#displayTextureMSAA?.destroy();
 
             this.#setupPipeline();
@@ -191,22 +192,30 @@ class WaveformVisualizer {
         // Guard against race condition with render loop
         if (!this.#gpuDevice) return;
 
-        // --- Resize canvas to match client size ---
         this.#canvas.width = Math.max(1, this.#canvas.clientWidth);
         this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
 
-        // Destroy old MSAA texture
+        this.#computeTexture?.destroy();
         this.#displayTextureMSAA?.destroy();
 
-        // Create new MSAA texture
+        this.#computeTexture = this.#gpuDevice.createTexture({
+            size: [this.#canvas.width, this.#canvas.height],
+            format: this.#canvasFormat,
+            usage:
+                GPUTextureUsage.STORAGE_BINDING |
+                GPUTextureUsage.TEXTURE_BINDING |
+                GPUTextureUsage.RENDER_ATTACHMENT |
+                GPUTextureUsage.COPY_SRC,
+        });
+        this.#computeTextureView = this.#computeTexture.createView();
+
         this.#displayTextureMSAA = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
-            sampleCount: 4, // or 2 if you want lower MSAA
+            sampleCount: 4,
             format: this.#canvasFormat,
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
 
-        // Recreate bind groups if needed
         this.#setupBindGroups();
     }
 
@@ -241,7 +250,6 @@ class WaveformVisualizer {
                 GPUTextureUsage.RENDER_ATTACHMENT |
                 GPUTextureUsage.COPY_SRC,
         });
-
         this.#computeTextureView = this.#computeTexture.createView();
 
         // Compute bind group layout
@@ -265,14 +273,6 @@ class WaveformVisualizer {
                 module: this.#shaderComputeWaveformModule,
                 entryPoint: "main",
             },
-        });
-
-        this.#computeBindGroup = this.#gpuDevice.createBindGroup({
-            layout: this.#computeBindGroupLayout,
-            entries: [
-                {binding: 0, resource: this.#computeTextureView},
-                {binding: 1, resource: {buffer: this.#timeBuffer}},
-            ],
         });
 
         // ------------ 2nd pass ------------
@@ -320,8 +320,33 @@ class WaveformVisualizer {
                 count: 4,
             }
         });
+    }
 
-        // Create bind group linking compute texture + sampler
+    /**
+     * Sets up bind groups for compute and display pipelines.
+     */
+    #setupBindGroups() {
+        if (
+            !this.#gpuDevice ||
+            !this.#computeBindGroupLayout ||
+            !this.#computeTextureView ||
+            !this.#timeBuffer ||
+            !this.#displayBindGroupLayout ||
+            !this.#displaySampler
+        ) {
+            return;
+        }
+
+        // Compute bind group
+        this.#computeBindGroup = this.#gpuDevice.createBindGroup({
+            layout: this.#computeBindGroupLayout,
+            entries: [
+                {binding: 0, resource: this.#computeTextureView},
+                {binding: 1, resource: {buffer: this.#timeBuffer}},
+            ],
+        });
+
+        // Display bind group
         this.#displayBindGroup = this.#gpuDevice.createBindGroup({
             layout: this.#displayBindGroupLayout,
             entries: [
@@ -332,17 +357,13 @@ class WaveformVisualizer {
     }
 
     /**
-     * Sets up bind groups (stub for compute-based approach).
-     */
-    #setupBindGroups() {
-        // In compute-based approach, setup compute and render bind groups here.
-        // This is a stub placeholder.
-    }
-
-    /**
      * Main render loop (stub for compute-based approach).
      */
     #renderLoop() {
+        if (!this.#computeTextureView) {
+            this.#resizeTextures();
+        }
+
         let time = 0;
         const frame = () => {
             // console.log(this.checkWaveformVisualizerResources());
@@ -369,6 +390,11 @@ class WaveformVisualizer {
             computePass.end();
 
             // --- Render pass (display to canvas) ---
+            const currentTexture = this.#context.getCurrentTexture();
+            if (!currentTexture) {
+                requestAnimationFrame(frame);
+                return;
+            }
             const renderPass = encoder.beginRenderPass({
                 colorAttachments: [{
                     view: this.#displayTextureMSAA.createView(),
