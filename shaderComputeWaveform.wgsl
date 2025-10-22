@@ -12,9 +12,30 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     }
 
     let channelCount = 16u;
-    let channelHeight = dims.y / channelCount;
-    let channelIndex = channelCount - 1u - (gid.y / channelHeight);
-    let localY_pixel = gid.y - (channelCount - 1u - channelIndex) * channelHeight;
+    // Even distribution of leftover pixels among first few channels
+    let baseHeight = dims.y / channelCount;
+    let remainder = dims.y % channelCount;
+
+    var y = gid.y;
+    var accumulated = 0u;
+    var channelIndex = 0u;
+
+    loop {
+        let h = baseHeight + select(1u, 0u, channelIndex >= remainder);
+        if (y < accumulated + h) {
+            break;
+        }
+        accumulated += h;
+        channelIndex += 1u;
+        if (channelIndex >= channelCount) {
+            break;
+        }
+    }
+
+    channelIndex = channelCount - 1u - channelIndex;
+
+    let localY_pixel = y - accumulated;
+    let channelHeight = baseHeight + select(1u, 0u, channelIndex < remainder);
 
     let samplesPerChannel = arrayLength(&waveform) / channelCount;
 
