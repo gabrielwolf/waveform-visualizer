@@ -12,16 +12,37 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     }
 
     let channelCount = 16u;
-    // Even distribution of leftover pixels among first few channels
     let baseHeight = dims.y / channelCount;
     let remainder = dims.y % channelCount;
+
+    // Compute which channels get the extra pixel: distributed from the center outward
+    var extraForChannel = array<u32, 16u>();
+    if (remainder > 0u) {
+        var remaining = remainder;
+        var offset = 0u;
+        loop {
+            if (remaining == 0u) { break; }
+            let leftIndex = i32(channelCount / 2u) - 1 - i32(offset);
+            let rightIndex = i32(channelCount / 2u) + i32(offset);
+            if (leftIndex >= 0 && remaining > 0u) {
+                extraForChannel[u32(leftIndex)] = 1u;
+                remaining -= 1u;
+            }
+            if (remaining == 0u) { break; }
+            if (rightIndex < i32(channelCount) && remaining > 0u) {
+                extraForChannel[u32(rightIndex)] = 1u;
+                remaining -= 1u;
+            }
+            offset += 1u;
+        }
+    }
 
     var y = gid.y;
     var accumulated = 0u;
     var channelIndex = 0u;
 
     loop {
-        let h = baseHeight + select(1u, 0u, channelIndex >= remainder);
+        let h = baseHeight + extraForChannel[channelIndex];
         if (y < accumulated + h) {
             break;
         }
@@ -35,7 +56,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     channelIndex = channelCount - 1u - channelIndex;
 
     let localY_pixel = y - accumulated;
-    let channelHeight = baseHeight + select(1u, 0u, channelIndex < remainder);
+    let channelHeight = baseHeight + extraForChannel[channelIndex];
 
     let samplesPerChannel = arrayLength(&waveform) / channelCount;
 
