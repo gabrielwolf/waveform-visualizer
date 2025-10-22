@@ -16,8 +16,9 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let channelHeight = 1.0 / f32(channelCount);
 
     // Determine which channel this pixel is in
-    let channelIndex = u32(floor(uv.y / channelHeight));
-    let localY = fract(uv.y / channelHeight); // y position within that band
+    let flippedY = 1.0 - uv.y;
+    let channelIndex = u32(floor(flippedY / channelHeight));
+    let localY = fract(flippedY / channelHeight); // y position within that band
 
     // Read from that channel’s data range
     let sampleIndex = u32(uv.x * f32(samplesPerChannel - 1u));
