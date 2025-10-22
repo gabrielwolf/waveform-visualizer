@@ -23,10 +23,10 @@ class WaveformVisualizer {
     #canvasColorSpace;
     /** @type {GPUTextureFormat | null} Internal format for GPU textures */
     #internalFormat;
-    /** @type {GPUDevice | null} WebGPU device used for compute & render */
-    #gpuDevice;
     /** @type {GPUCanvasContext | null} WebGPU canvas context */
     #context;
+    /** @type {GPUDevice | null} WebGPU device used for compute & render */
+    #gpuDevice;
 
     /** @type {string | null} WGSL shader code for compute waveform */
     #shaderComputeWaveformCode;
@@ -128,12 +128,29 @@ class WaveformVisualizer {
         this.#canvas.height = Math.max(1, this.#canvas.clientHeight);
         this.#canvasFormat = null;
         this.#canvasColorSpace = null;
-
+        this.#internalFormat = null;
         this.#shaderComputeWaveformCode = null;
-
-        this.#boost = 1.5;
-        this.#gamma = 0.45;
-        this.#smoothingFactor = 0.20;
+        this.#shaderComputeWaveformModule = null;
+        this.#shaderDisplayCode = null;
+        this.#shaderDisplayModule = null;
+        this.#uniformBuffer = null;
+        this.#displayTextureMSAA = null;
+        this.#boost = undefined;
+        this.#gamma = undefined;
+        this.#smoothingFactor = undefined;
+        this.#timeBuffer = 0;
+        this.#computeTexture = null;
+        this.#computeTextureView = null;
+        this.#computePipeline = null;
+        this.#computeBindGroupLayout = null;
+        this.#computeBindGroup = null;
+        this.#displayPipelineLayout = null;
+        this.#displayPipeline = null;
+        this.#displayBindGroupLayout = null;
+        this.#displayBindGroup = null;
+        this.#displaySampler = null;
+        this.#waveformData = null;
+        this.#backgroundData = null;
 
         const gpuContextManager = GpuContextManager.init();
         this.#context = gpuContextManager.configureCanvas(this.#canvas);
@@ -421,8 +438,8 @@ class WaveformVisualizer {
             '#canvasFormat': this.#canvasFormat,
             '#canvasColorSpace': this.#canvasColorSpace,
             '#internalFormat': this.#internalFormat,
-            '#gpuDevice': this.#gpuDevice,
             '#context': this.#context,
+            '#gpuDevice': this.#gpuDevice,
             '#shaderComputeWaveformCode': this.#shaderComputeWaveformCode,
             '#shaderComputeWaveformModule': this.#shaderComputeWaveformModule,
             '#shaderDisplayCode': this.#shaderDisplayCode,

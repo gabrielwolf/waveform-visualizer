@@ -1,8 +1,8 @@
-@group(0) @binding(0) var outImage : texture_storage_2d<rgba16float, write>;
-@group(0) @binding(1) var<uniform> time : f32;
+@group(0) @binding(0) var outImage: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(1) var<uniform> time: f32;
 
 @compute @workgroup_size(8, 8)
-fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dims = textureDimensions(outImage);
     if (gid.x >= dims.x || gid.y >= dims.y) {
         return;
