@@ -21,7 +21,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 
     // Read from that channel’s data range
     let sampleIndex = u32(uv.x * f32(samplesPerChannel - 1u));
-    let waveformIndex = channelIndex * samplesPerChannel + sampleIndex;
+    let waveformIndex = sampleIndex * channelCount + channelIndex;
     let value = waveform[waveformIndex];
 
     var color = vec4f(0.0);
