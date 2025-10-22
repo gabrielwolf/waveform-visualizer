@@ -77,7 +77,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 
     let waveformIndex = startSample * channelCount + channelIndex;
     let rawPeakValue = peaks[waveformIndex];
-    let peakValue = (rawPeakValue / firstChannelMax) * 0.5 + 0.4;
+    let peakValue = (rawPeakValue / firstChannelMax) * 1.0 + 0.35;
 
     var waveformColor = vec4f(0.0);
     let lineCenter_pixel = channelHeight / 2u;

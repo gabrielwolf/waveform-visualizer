@@ -235,7 +235,7 @@ class WaveformVisualizer {
 
         this.#displayTextureMSAA = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
-            sampleCount: 4,
+            sampleCount: 1,
             format: this.#canvasFormat,
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
@@ -332,8 +332,8 @@ class WaveformVisualizer {
 
         // Create sampler for sampling compute texture
         this.#displaySampler = this.#gpuDevice.createSampler({
-            magFilter: 'linear',
-            minFilter: 'linear',
+            magFilter: 'nearest',
+            minFilter: 'nearest',
         });
 
         // Create bind group layout for texture + sampler
@@ -365,7 +365,7 @@ class WaveformVisualizer {
             },
             primitive: {topology: 'triangle-list'},
             multisample: {
-                count: 4,
+                count: 1,
             }
         });
     }
@@ -441,15 +441,9 @@ class WaveformVisualizer {
             computePass.end();
 
             // --- Render pass (display to canvas) ---
-            const currentTexture = this.#context.getCurrentTexture();
-            if (!currentTexture) {
-                requestAnimationFrame(frame);
-                return;
-            }
             const renderPass = encoder.beginRenderPass({
                 colorAttachments: [{
-                    view: this.#displayTextureMSAA.createView(),
-                    resolveTarget: this.#context.getCurrentTexture().createView(),
+                    view: this.#context.getCurrentTexture().createView(),
                     loadOp: 'clear',
                     storeOp: 'store',
                     clearValue: {r: 0, g: 0, b: 0, a: 1},
