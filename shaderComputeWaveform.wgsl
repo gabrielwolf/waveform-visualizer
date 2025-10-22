@@ -11,45 +11,43 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 
     let uv = vec2<f32>(f32(gid.x) / f32(dims.x), f32(gid.y) / f32(dims.y));
 
-    let channelCount = 16u;
-    let samplesPerChannel = arrayLength(&waveform) / channelCount;
-    let channelHeight = 1.0 / f32(channelCount);
+// --- Compute channel and local pixel coordinates ---
+let channelCount = 16u;
+let channelHeight = dims.y / channelCount; // integer pixels per channel
+let channelIndex = channelCount - 1u - (gid.y / channelHeight);
+let localY_pixel = gid.y - (channelCount - 1u - channelIndex) * channelHeight;
 
-    // Determine which channel this pixel is in
-    let flippedY = 1.0 - uv.y;
-    let channelIndex = u32(floor(flippedY / channelHeight));
-    let localY = fract(flippedY / channelHeight); // y position within that band
+// --- Read waveform sample ---
+let samplesPerChannel = arrayLength(&waveform) / channelCount;
+let uvX = f32(gid.x) / f32(dims.x);
+let sampleIndex = u32(uvX * f32(samplesPerChannel - 1u));
+let waveformIndex = sampleIndex * channelCount + channelIndex;
+let value = waveform[waveformIndex];
 
-    // Read from that channel’s data range
-    let sampleIndex = u32(uv.x * f32(samplesPerChannel - 1u));
-    let waveformIndex = sampleIndex * channelCount + channelIndex;
-    let value = waveform[waveformIndex];
+var color = vec4f(0.0);
 
-    var color = vec4f(0.0);
+// --- Pixel-perfect mirrored waveform ---
+let lineCenter_pixel = channelHeight / 2u; // baseline at center of channel
+let halfHeight_pixel = u32(value * 0.5 * f32(channelHeight) + 0.5); // rounded half-height
 
-    // 1-pixel horizontal baseline for each channel
-    let pixelHeight = (1.0 / f32(dims.y)) / channelHeight;
-    let lineCenter = 0.5;
-    let halfHeight = value * 0.5; // waveform scaled to half channel
-    let y_start = lineCenter - pixelHeight * 0.5;
-    let y_end   = lineCenter + pixelHeight * 0.5;
+let y_down = i32(lineCenter_pixel) - i32(halfHeight_pixel);
+let y_up   = i32(lineCenter_pixel) + i32(halfHeight_pixel);
+let localY = i32(localY_pixel);
 
-    if (localY >= y_start && localY <= y_end) {
-        color = vec4f(1.0, 1.0, 1.0, 1.0);
-    }
+// Downward half-waveform
+if (localY >= y_down && localY <= i32(lineCenter_pixel)) {
+    color = vec4f(1.0, 1.0, 1.0, 1.0);
+}
 
-    // Waveform fill
-    let y_down = lineCenter - halfHeight;  // waveform downward
-    let y_up   = lineCenter + halfHeight;  // waveform upward
-    if (localY >= y_down && localY <= lineCenter) {
-        // original downward half-waveform
-        color = vec4f(1.0, 1.0, 1.0, 1.0);
-    }
+// Upward mirrored half-waveform
+if (localY > i32(lineCenter_pixel) && localY <= y_up) {
+    color = vec4f(1.0, 1.0, 1.0, 1.0);
+}
 
-    if (localY > lineCenter && localY <= y_up) {
-        // mirrored upward half-waveform
-        color = vec4f(1.0, 1.0, 1.0, 1.0);
-    }
+// 1-pixel baseline
+if (localY == i32(lineCenter_pixel)) {
+    color = vec4f(1.0, 1.0, 1.0, 1.0);
+}
 
-    textureStore(outImage, vec2<i32>(gid.xy), color);
+textureStore(outImage, vec2<i32>(gid.xy), color);
 }
