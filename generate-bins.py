@@ -51,7 +51,7 @@ for x in range(image_width):
     # Peak amplitude per channel
     peak[x] = np.max(np.abs(segment), axis=0)
 
-    # True peak per channel
+    # True peak per channel (x60 slower than mean)
     # peak[x] = true_peak(segment, upsample=8)
 
     # Mean amplitude per channel
