@@ -2,6 +2,7 @@
 @group(0) @binding(1) var<uniform> time: f32;
 @group(0) @binding(2) var<storage, read> waveform: array<f32>;
 @group(0) @binding(3) var<storage, read> peaks: array<f32>;
+@group(0) @binding(4) var<uniform> firstChannelMax: f32;
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
@@ -24,15 +25,17 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 
     var maxValue = 0.0;
     for (var i = startSample; i < endSample && i < samplesPerChannel; i = i + 1u) {
-        let idx = i * channelCount + channelIndex;
-        let v = waveform[idx];
-        if (v > maxValue) {
-            maxValue = v;
+        let index = i * channelCount + channelIndex;
+        let rawValue = waveform[index];
+        let normalizedValue = rawValue / firstChannelMax;
+        if (normalizedValue > maxValue) {
+            maxValue = normalizedValue;
         }
     }
 
     let waveformIndex = startSample * channelCount + channelIndex;
-    let peakValue = peaks[waveformIndex] * 0.8 + 0.5;
+    let rawPeakValue = peaks[waveformIndex];
+    let peakValue = (rawPeakValue / firstChannelMax) * 0.8 + 0.5;
 
     var waveformColor = vec4f(0.0);
     let lineCenter_pixel = channelHeight / 2u;
