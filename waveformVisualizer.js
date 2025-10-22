@@ -76,9 +76,11 @@ class WaveformVisualizer {
     /** @type {Float32Array | null} Normalized waveform data from binary file */
     #waveformData;
     /** @type {GPUBuffer | null} */
-    #waveformBuffer;
+    #waveformDataBuffer;
     /** @type {Float32Array | null} Normalized background or peak data */
     #backgroundData;
+    /** @type {GPUBuffer | null} Normalized background or peak data */
+    #backgroundDataBuffer;
 
 
     static async loadShader(url) {
@@ -153,7 +155,9 @@ class WaveformVisualizer {
         this.#displayBindGroup = null;
         this.#displaySampler = null;
         this.#waveformData = null;
+        this.#waveformDataBuffer = null;
         this.#backgroundData = null;
+        this.#backgroundDataBuffer = null;
 
         const gpuContextManager = GpuContextManager.init();
         this.#context = gpuContextManager.configureCanvas(this.#canvas);
@@ -260,11 +264,17 @@ class WaveformVisualizer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
-        this.#waveformBuffer = this.#gpuDevice.createBuffer({
+        this.#waveformDataBuffer = this.#gpuDevice.createBuffer({
             size: this.#waveformData.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
-        this.#gpuDevice.queue.writeBuffer(this.#waveformBuffer, 0, this.#waveformData);
+        this.#gpuDevice.queue.writeBuffer(this.#waveformDataBuffer, 0, this.#waveformData);
+
+        this.#backgroundDataBuffer = this.#gpuDevice.createBuffer({
+            size: this.#backgroundData.byteLength,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        });
+        this.#gpuDevice.queue.writeBuffer(this.#backgroundDataBuffer, 0, this.#backgroundData);
 
         // Create output texture (storage + sampled)
         this.#computeTexture = this.#gpuDevice.createTexture({
@@ -287,7 +297,8 @@ class WaveformVisualizer {
                     storageTexture: {access: "write-only", format: this.#canvasFormat}
                 },
                 {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}},
-                {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}},
+                {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
+                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
             ]
         });
 
@@ -370,7 +381,8 @@ class WaveformVisualizer {
             entries: [
                 {binding: 0, resource: this.#computeTextureView},
                 {binding: 1, resource: {buffer: this.#timeBuffer}},
-                {binding: 2, resource: {buffer: this.#waveformBuffer}},
+                {binding: 2, resource: {buffer: this.#waveformDataBuffer}},
+                {binding: 3, resource: {buffer: this.#backgroundDataBuffer}},
             ],
         });
 
@@ -473,6 +485,7 @@ class WaveformVisualizer {
             '#displaySampler': this.#displaySampler,
             '#waveformData': this.#waveformData,
             '#backgroundData': this.#backgroundData,
+            '#backgroundDataBuffer': this.#backgroundDataBuffer,
         };
 
         const missing = [];
