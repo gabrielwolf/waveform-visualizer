@@ -22,7 +22,7 @@ num_channels = 16
 image_width = 4096  # target horizontal pixels
 
 # Read raw PCM
-raw = np.fromfile("output.raw", dtype=np.int16)
+raw = np.fromfile("output.raw", dtype=np.float32)
 num_samples = len(raw) // num_channels
 raw = raw.reshape((num_samples, num_channels))
 
@@ -45,18 +45,10 @@ for x in range(image_width):
     # peak[x] = true_peak(segment, upsample=8)
 
     # Mean amplitude per channel
-    mean[x] = np.mean(np.abs(segment), axis=0)
+    # mean[x] = np.mean(np.abs(segment), axis=0)
 
     # RMS amplitude per channel
-    # mean[x] = np.sqrt(np.mean(segment.astype(np.float64)**2, axis=0))
-
-# Normalize relative to first channel max peak and mean
-first_channel_peak_max = np.max(peak[:, 0])
-first_channel_mean_max = np.max(mean[:, 0])
-
-# Scale all channels so that first channel max peak maps to 1.0
-peak = peak / first_channel_peak_max
-mean = mean / first_channel_mean_max
+    mean[x] = np.sqrt(np.mean(segment.astype(np.float32)**2, axis=0))
 
 # Save as float32 binary files
 peak.astype(np.float32).tofile("peak.bin")
