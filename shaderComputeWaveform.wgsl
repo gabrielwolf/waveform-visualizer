@@ -10,16 +10,28 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     }
 
     let uv = vec2<f32>(f32(gid.x) / f32(dims.x), f32(gid.y) / f32(dims.y));
-    let index = u32(uv.x * f32(arrayLength(&waveform) - 1u));
-    let value = waveform[index]; // 0..1
 
-    let line_thickness = 0.005;
+    let channelCount = 16u;
+    let samplesPerChannel = arrayLength(&waveform) / channelCount;
+    let channelHeight = 1.0 / f32(channelCount);
+
+    // Determine which channel this pixel is in
+    let channelIndex = u32(floor(uv.y / channelHeight));
+    let localY = fract(uv.y / channelHeight); // y position within that band
+
+    // Read from that channel’s data range
+    let sampleIndex = u32(uv.x * f32(samplesPerChannel - 1u));
+    let waveformIndex = channelIndex * samplesPerChannel + sampleIndex;
+    let value = waveform[waveformIndex];
 
     var color = vec4f(0.0);
-    if (abs(uv.y - value) < line_thickness) {
-        color = vec4f(value, 1.0 - value, 0.2, 1.0);
+    let y_wave = 1.0 - value; // flip if needed
+    let line_thickness = 0.005;
+
+    if (abs(localY - y_wave) < line_thickness) {
+        // give each channel a distinct tint for debugging
+        color = vec4f(1.0, 1.0, 1.0, 1.0);
     }
 
     textureStore(outImage, vec2<i32>(gid.xy), color);
 }
-
