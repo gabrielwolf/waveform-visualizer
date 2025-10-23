@@ -39,7 +39,7 @@ class WaveformVisualizer {
     /** @type {GPUShaderModule | null} Compiled display shader module */
     #shaderDisplayModule;
 
-    /** @type {GPUBuffer | null} Uniform buffer for parameters (time, boost, gamma, etc.) */
+    /** @type {GPUBuffer | null} Uniform buffer for parameters (boost, gamma, etc.) */
     #uniformBuffer;
     /** @type {GPUBuffer | null} Uniform buffer for firstChannelMax */
     #firstChannelMaximumBuffer;
@@ -53,8 +53,6 @@ class WaveformVisualizer {
     /** @type {number | null} Smoothing factor for waveform */
     #smoothingFactor;
 
-    /** @type {number | null} Time parameter for compute shader */
-    #timeBuffer;
     /** @type {GPUTexture | null} Compute texture for compute shader results */
     #computeTexture;
     /** @type {GPUTextureView | null} View of the output texture */
@@ -144,7 +142,6 @@ class WaveformVisualizer {
         this.#gamma = undefined;
         this.#smoothingFactor = undefined;
         this.#firstChannelMaximumBuffer = null;
-        this.#timeBuffer = 0;
         this.#computeTexture = null;
         this.#computeTextureView = null;
         this.#computePipeline = null;
@@ -253,12 +250,6 @@ class WaveformVisualizer {
             code: this.#shaderComputeWaveformCode,
         });
 
-        // Create uniform buffer (for time)
-        this.#timeBuffer = this.#gpuDevice.createBuffer({
-            size: 4,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-
         // Uniform buffer for display parameters (boost, gamma, smoothing)
         this.#uniformBuffer = this.#gpuDevice.createBuffer({
             size: 16, // 4 floats * 4 bytes
@@ -301,15 +292,10 @@ class WaveformVisualizer {
         // Compute bind group layout (add binding 4 for firstChannelMax uniform)
         this.#computeBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
             entries: [
-                {
-                    binding: 0,
-                    visibility: GPUShaderStage.COMPUTE,
-                    storageTexture: {access: "write-only", format: this.#canvasFormat}
-                },
-                {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}},
-                {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
-                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
-                {binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // firstChannelMax
+                {binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: "write-only", format: this.#canvasFormat}},
+                {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
+                {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
+                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // firstChannelMax
             ]
         });
 
@@ -379,7 +365,6 @@ class WaveformVisualizer {
             !this.#gpuDevice ||
             !this.#computeBindGroupLayout ||
             !this.#computeTextureView ||
-            !this.#timeBuffer ||
             !this.#displayBindGroupLayout ||
             !this.#displaySampler
         ) {
@@ -391,10 +376,9 @@ class WaveformVisualizer {
             layout: this.#computeBindGroupLayout,
             entries: [
                 {binding: 0, resource: this.#computeTextureView},
-                {binding: 1, resource: {buffer: this.#timeBuffer}},
-                {binding: 2, resource: {buffer: this.#waveformDataBuffer}},
-                {binding: 3, resource: {buffer: this.#backgroundDataBuffer}},
-                {binding: 4, resource: {buffer: this.#firstChannelMaximumBuffer}},
+                {binding: 1, resource: {buffer: this.#waveformDataBuffer}},
+                {binding: 2, resource: {buffer: this.#backgroundDataBuffer}},
+                {binding: 3, resource: {buffer: this.#firstChannelMaximumBuffer}},
             ],
         });
 
@@ -416,19 +400,15 @@ class WaveformVisualizer {
             this.#resizeTextures();
         }
 
-        let time = 0;
         const frame = () => {
             // console.log(this.checkWaveformVisualizerResources());
 
             if (!this.#gpuDevice || !this.#computePipeline || !this.#computeBindGroup || !this.#displayPipeline
                 || !this.#displayBindGroup || !this.#computeTexture || !this.#computeTextureView
-                || !this.#displayTextureMSAA || !this.#uniformBuffer || !this.#timeBuffer) {
+                || !this.#displayTextureMSAA || !this.#uniformBuffer) {
                 requestAnimationFrame(frame);
                 return;
             }
-
-            time += 0.016;
-            this.#gpuDevice.queue.writeBuffer(this.#timeBuffer, 0, new Float32Array([time]));
 
             const encoder = this.#gpuDevice.createCommandEncoder();
 
@@ -478,7 +458,6 @@ class WaveformVisualizer {
             '#boost': this.#boost,
             '#gamma': this.#gamma,
             '#smoothingFactor': this.#smoothingFactor,
-            '#timeBuffer': this.#timeBuffer,
             '#computeTexture': this.#computeTexture,
             '#computeTextureView': this.#computeTextureView,
             '#computePipeline': this.#computePipeline,
