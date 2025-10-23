@@ -2,24 +2,27 @@ struct Params {
     firstChannelPeak: f32,
     boost: f32,
     offset: f32,
-    _pad: f32
+    _pad: f32,             // padding to align next vec2 to 16 bytes
+    width: f32,
+    height: f32,
 };
 
 @group(0) @binding(0) var<storage, read> waveform: array<f32>;
 @group(0) @binding(1) var<storage, read> peaks: array<f32>;
 @group(0) @binding(2) var<uniform> params: Params;
-@group(0) @binding(3) var outImage: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(3) var<storage, read_write> computeOutput : array<vec2<f32>>;
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
-    let dims = textureDimensions(outImage);
-    if (gid.x >= dims.x || gid.y >= dims.y) {
+    let width = u32(params.width);
+    let height = u32(params.height);
+    if (gid.x >= width || gid.y >= height) {
         return;
     }
 
     let channelCount = 16u;
-    let baseHeight = dims.y / channelCount;
-    let remainder = dims.y % channelCount;
+    let baseHeight = height / channelCount;
+    let remainder = height % channelCount;
 
     // Compute which channels get the extra pixel: distributed from the center outward
     var extraForChannel = array<u32, 16u>();
@@ -67,7 +70,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let samplesPerChannel = arrayLength(&waveform) / channelCount;
 
     // Compute sample range per pixel
-    let samplesPerPixel = f32(samplesPerChannel) / f32(dims.x);
+    let samplesPerPixel = f32(samplesPerChannel) / f32(width);
     let startSample = u32(floor(f32(gid.x) * samplesPerPixel));
     let endSample = u32(floor(f32(gid.x + 1u) * samplesPerPixel));
 
@@ -85,24 +88,22 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let rawPeakValue = peaks[waveformIndex];
     let peakValue = (rawPeakValue / params.firstChannelPeak) * params.boost + params.offset;
 
-    var waveformColor = vec4f(0.0);
+    var waveformColor = vec2<f32>(0.0, 0.0);
     let lineCenter_pixel = channelHeight / 2u;
     let halfHeight_pixel = u32(maxValue * 0.5 * f32(channelHeight) + 0.5);
     let y_down = i32(lineCenter_pixel) - i32(halfHeight_pixel);
     let y_up   = i32(lineCenter_pixel) + i32(halfHeight_pixel);
     let localY = i32(localY_pixel);
 
+    // Center line
     if (localY >= y_down && localY <= y_up) {
-        waveformColor = vec4f(1.0, 1.0, 1.0, 1.0);
+        waveformColor = vec2<f32>(1.0, 1.0);
     }
 
-    let maskColor = vec4f(peakValue, peakValue, peakValue, 1.0);
-    let finalColor = vec4f(
-        min(waveformColor.r, maskColor.r),
-        min(waveformColor.g, maskColor.g),
-        min(waveformColor.b, maskColor.b),
-        waveformColor.a
-    );
+    let maskColor = vec2<f32>(peakValue, 1.0);
+    let brightness = f32(min(waveformColor.x, maskColor.y));
+    let alpha = waveformColor.y;
 
-    textureStore(outImage, vec2<i32>(gid.xy), finalColor);
+    let index = gid.y * width + gid.x;
+    computeOutput[index] = vec2<f32>(brightness, alpha);
 }

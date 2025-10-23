@@ -46,6 +46,8 @@ class WaveformVisualizer {
     /** @type {GPUTexture | null} MSAA texture for display */
     #displayTextureMSAA;
 
+    /** @type {number | null} Peak of first channel */
+    #firstChannelPeak;
     /** @type {number | null} Visualization intensity */
     #boost;
     /** @type {number | null} Brightness offset */
@@ -53,16 +55,13 @@ class WaveformVisualizer {
     /** @type {number | null} Ambisonics channel count */
     #channelCount;
 
-    /** @type {GPUTexture | null} Compute texture for compute shader results */
-    #computeTexture;
-    /** @type {GPUTextureView | null} View of the output texture */
-    #computeTextureView;
     /** @type {GPUComputePipeline | null} Compute pipeline for waveform generation */
     #computePipeline;
     /** @type {GPUBindGroupLayout | null} Compute shader bind group layout */
     #computeBindGroupLayout;
     /** @type {GPUBindGroup | null} Bind group linking buffers & textures for compute */
     #computeBindGroup;
+    #computeOutputBuffer;
 
     /** @type {GPUPipelineLayout | null} Pipeline layout for display */
     #displayPipelineLayout;
@@ -83,7 +82,6 @@ class WaveformVisualizer {
     #backgroundData;
     /** @type {GPUBuffer | null} Normalized background or peak data */
     #backgroundDataBuffer;
-    #firstChannelPeak;
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -142,8 +140,6 @@ class WaveformVisualizer {
         this.#offset = 0.1;
         this.#channelCount = 16;
         this.#firstChannelMaximumBuffer = null;
-        this.#computeTexture = null;
-        this.#computeTextureView = null;
         this.#computePipeline = null;
         this.#computeBindGroupLayout = null;
         this.#computeBindGroup = null;
@@ -170,7 +166,6 @@ class WaveformVisualizer {
             this.#canvasColorSpace = context.colorSpace;
             this.#internalFormat = context.internalFormat;
 
-            this.#computeTexture?.destroy();
             this.#displayTextureMSAA?.destroy();
 
             this.#setupPipeline();
@@ -217,19 +212,7 @@ class WaveformVisualizer {
         this.#canvas.width = Math.max(1, Math.floor(this.#canvas.clientWidth * this.#devicePixelRatio));
         this.#canvas.height = Math.max(1, Math.floor(this.#canvas.clientHeight * this.#devicePixelRatio));
 
-        this.#computeTexture?.destroy();
         this.#displayTextureMSAA?.destroy();
-
-        this.#computeTexture = this.#gpuDevice.createTexture({
-            size: [this.#canvas.width, this.#canvas.height],
-            format: this.#canvasFormat,
-            usage:
-                GPUTextureUsage.STORAGE_BINDING |
-                GPUTextureUsage.TEXTURE_BINDING |
-                GPUTextureUsage.RENDER_ATTACHMENT |
-                GPUTextureUsage.COPY_SRC,
-        });
-        this.#computeTextureView = this.#computeTexture.createView();
 
         this.#displayTextureMSAA = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
@@ -256,12 +239,14 @@ class WaveformVisualizer {
             this.#firstChannelPeak,
             this.#boost,
             this.#offset,
-            0.0 // padding
+            0.0, // padding
+            this.#canvas.width,
+            this.#canvas.height,
         ]);
 
         // Create a uniform buffer for Params
         this.#paramsBuffer = this.#gpuDevice.createBuffer({
-            size: 16, // 4 floats × 4 bytes
+            size: 32,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
@@ -287,17 +272,15 @@ class WaveformVisualizer {
         });
         this.#gpuDevice.queue.writeBuffer(this.#backgroundDataBuffer, 0, this.#backgroundData);
 
-        // Create output texture (storage + sampled)
-        this.#computeTexture = this.#gpuDevice.createTexture({
-            size: [this.#canvas.width, this.#canvas.height],
-            format: this.#canvasFormat,
-            usage:
-                GPUTextureUsage.STORAGE_BINDING |
-                GPUTextureUsage.TEXTURE_BINDING |
-                GPUTextureUsage.RENDER_ATTACHMENT |
-                GPUTextureUsage.COPY_SRC,
+        // Create compute output buffer (brightness + alpha pairs)
+        const outputElementCount = this.#canvas.width * this.#canvas.height;
+        const outputBufferSize = outputElementCount * 2 * 4; // vec2<f32> = 8 bytes per pixel
+        console.log("Canvas size:", this.#canvas.width, this.#canvas.height, "Output buffer size:", outputBufferSize);
+
+        this.#computeOutputBuffer = this.#gpuDevice.createBuffer({
+            size: outputBufferSize,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
         });
-        this.#computeTextureView = this.#computeTexture.createView();
 
         // Compute bind group layout (add binding 4 for firstChannelMax uniform)
         this.#computeBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
@@ -305,11 +288,7 @@ class WaveformVisualizer {
                 {binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
                 {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
                 {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // Params
-                {
-                    binding: 3,
-                    visibility: GPUShaderStage.COMPUTE,
-                    storageTexture: {access: "write-only", format: this.#canvasFormat}
-                },
+                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "storage"}}, // computeOutput buffer
             ]
         });
 
@@ -340,8 +319,8 @@ class WaveformVisualizer {
         // Create bind group layout for texture + sampler
         this.#displayBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
             entries: [
-                {binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {}},
-                {binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
+                {binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: {type: "storage"}}, // computeOutput
+                {binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: {type: "uniform"}}, // params
             ],
         });
 
@@ -378,7 +357,6 @@ class WaveformVisualizer {
         if (
             !this.#gpuDevice ||
             !this.#computeBindGroupLayout ||
-            !this.#computeTextureView ||
             !this.#displayBindGroupLayout ||
             !this.#displaySampler
         ) {
@@ -392,7 +370,7 @@ class WaveformVisualizer {
                 {binding: 0, resource: {buffer: this.#waveformDataBuffer}},
                 {binding: 1, resource: {buffer: this.#backgroundDataBuffer}},
                 {binding: 2, resource: {buffer: this.#paramsBuffer}},
-                {binding: 3, resource: this.#computeTextureView},
+                {binding: 3, resource: {buffer: this.#computeOutputBuffer}},
             ],
         });
 
@@ -400,8 +378,8 @@ class WaveformVisualizer {
         this.#displayBindGroup = this.#gpuDevice.createBindGroup({
             layout: this.#displayBindGroupLayout,
             entries: [
-                {binding: 0, resource: this.#computeTextureView},
-                {binding: 1, resource: this.#displaySampler},
+                {binding: 0, resource: {buffer: this.#computeOutputBuffer}},
+                {binding: 1, resource: {buffer: this.#paramsBuffer}}
             ],
         });
     }
@@ -410,7 +388,8 @@ class WaveformVisualizer {
      * Main render loop (stub for compute-based approach).
      */
     #renderLoop() {
-        if (!this.#computeTextureView) {
+        // TODO here we maybe need to reinitialize the last remaining texture, or delete that!
+        if (!this.#displayTextureMSAA) {
             this.#resizeTextures();
         }
 
@@ -418,8 +397,7 @@ class WaveformVisualizer {
             // console.log(this.checkWaveformVisualizerResources());
 
             if (!this.#gpuDevice || !this.#computePipeline || !this.#computeBindGroup || !this.#displayPipeline
-                || !this.#displayBindGroup || !this.#computeTexture || !this.#computeTextureView
-                || !this.#displayTextureMSAA || !this.#paramsBuffer) {
+                || !this.#displayBindGroup || !this.#displayTextureMSAA || !this.#paramsBuffer) {
                 requestAnimationFrame(frame);
                 return;
             }
@@ -472,8 +450,6 @@ class WaveformVisualizer {
             '#firstChannelPeak': this.#firstChannelPeak,
             '#boost': this.#boost,
             '#offset': this.#offset,
-            '#computeTexture': this.#computeTexture,
-            '#computeTextureView': this.#computeTextureView,
             '#computePipeline': this.#computePipeline,
             '#computeBindGroupLayout': this.#computeBindGroupLayout,
             '#computeBindGroup': this.#computeBindGroup,
@@ -502,7 +478,7 @@ class WaveformVisualizer {
      */
     updateparamsBuffer() {
         if (!this.#gpuDevice || !this.#paramsBuffer) return;
-        const paramsData = new Float32Array([this.#firstChannelPeak, this.#boost, this.#offset, 0.0]);
+        const paramsData = new Float32Array([this.#firstChannelPeak, this.#boost, this.#offset, 0.0, this.#canvas.width, this.#canvas.height]);
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData.buffer, paramsData.byteOffset, paramsData.byteLength);
     }
 }
