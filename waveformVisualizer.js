@@ -39,8 +39,10 @@ class WaveformVisualizer {
     /** @type {GPUShaderModule | null} Compiled display shader module */
     #shaderDisplayModule;
 
-    /** @type {GPUBuffer | null} Uniform buffer for parameters (boost, gamma, etc.) */
-    #uniformBuffer;
+
+
+    /** @type {GPUBuffer | null} Uniform buffer for parameters (boost, offset, etc.) */
+    #paramsBuffer;
     /** @type {GPUBuffer | null} Uniform buffer for firstChannelMax */
     #firstChannelMaximumBuffer;
     /** @type {GPUTexture | null} MSAA texture for display */
@@ -48,10 +50,10 @@ class WaveformVisualizer {
 
     /** @type {number | null} Visualization intensity */
     #boost;
-    /** @type {number | null} Gamma correction */
-    #gamma;
-    /** @type {number | null} Smoothing factor for waveform */
-    #smoothingFactor;
+    /** @type {number | null} Brightness offset */
+    #offset;
+    /** @type {number | null} Ambisonics channel count */
+    #channelCount;
 
     /** @type {GPUTexture | null} Compute texture for compute shader results */
     #computeTexture;
@@ -83,7 +85,7 @@ class WaveformVisualizer {
     #backgroundData;
     /** @type {GPUBuffer | null} Normalized background or peak data */
     #backgroundDataBuffer;
-
+    #firstChannelPeak;
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -136,11 +138,11 @@ class WaveformVisualizer {
         this.#shaderComputeWaveformModule = null;
         this.#shaderDisplayCode = null;
         this.#shaderDisplayModule = null;
-        this.#uniformBuffer = null;
+        this.#paramsBuffer = null;
         this.#displayTextureMSAA = null;
-        this.#boost = undefined;
-        this.#gamma = undefined;
-        this.#smoothingFactor = undefined;
+        this.#boost = 1.5;
+        this.#offset = 0.1;
+        this.#channelCount = 16;
         this.#firstChannelMaximumBuffer = null;
         this.#computeTexture = null;
         this.#computeTextureView = null;
@@ -190,7 +192,7 @@ class WaveformVisualizer {
             this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./peak.bin');
 
             await this.#setupPipeline();
-            this.updateUniformBuffer();
+            this.updateparamsBuffer();
 
             this.#resizeTextures();
             this.#setupBindGroups();
@@ -250,11 +252,21 @@ class WaveformVisualizer {
             code: this.#shaderComputeWaveformCode,
         });
 
-        // Uniform buffer for display parameters (boost, gamma, smoothing)
-        this.#uniformBuffer = this.#gpuDevice.createBuffer({
-            size: 16, // 4 floats * 4 bytes
+        this.#firstChannelPeak = Math.max(...this.#waveformData.filter((_, i) => i % 16 === 0)); // channel 0
+
+        const paramsData = new Float32Array([
+            this.#firstChannelPeak,
+            this.#boost,
+            this.#offset,
+            0.0 // padding
+        ]);
+
+        // Create a uniform buffer for Params
+        this.#paramsBuffer = this.#gpuDevice.createBuffer({
+            size: 16, // 4 floats × 4 bytes
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
+        this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
 
         // Uniform buffer for firstChannelMax (1 float)
         const firstChannelMax = Math.max(...this.#waveformData.filter((_, i) => i % 16 === 0)); // channel 0
@@ -292,10 +304,14 @@ class WaveformVisualizer {
         // Compute bind group layout (add binding 4 for firstChannelMax uniform)
         this.#computeBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
             entries: [
-                {binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: "write-only", format: this.#canvasFormat}},
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {access: "write-only", format: this.#canvasFormat}
+                },
                 {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
                 {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
-                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // firstChannelMax
+                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // Params
             ]
         });
 
@@ -378,7 +394,7 @@ class WaveformVisualizer {
                 {binding: 0, resource: this.#computeTextureView},
                 {binding: 1, resource: {buffer: this.#waveformDataBuffer}},
                 {binding: 2, resource: {buffer: this.#backgroundDataBuffer}},
-                {binding: 3, resource: {buffer: this.#firstChannelMaximumBuffer}},
+                {binding: 3, resource: {buffer: this.#paramsBuffer}},
             ],
         });
 
@@ -405,7 +421,7 @@ class WaveformVisualizer {
 
             if (!this.#gpuDevice || !this.#computePipeline || !this.#computeBindGroup || !this.#displayPipeline
                 || !this.#displayBindGroup || !this.#computeTexture || !this.#computeTextureView
-                || !this.#displayTextureMSAA || !this.#uniformBuffer) {
+                || !this.#displayTextureMSAA || !this.#paramsBuffer) {
                 requestAnimationFrame(frame);
                 return;
             }
@@ -453,11 +469,11 @@ class WaveformVisualizer {
             '#shaderComputeWaveformModule': this.#shaderComputeWaveformModule,
             '#shaderDisplayCode': this.#shaderDisplayCode,
             '#shaderDisplayModule': this.#shaderDisplayModule,
-            '#uniformBuffer': this.#uniformBuffer,
+            '#paramsBuffer': this.#paramsBuffer,
             '#displayTextureMSAA': this.#displayTextureMSAA,
+            '#firstChannelPeak': this.#firstChannelPeak,
             '#boost': this.#boost,
-            '#gamma': this.#gamma,
-            '#smoothingFactor': this.#smoothingFactor,
+            '#offset': this.#offset,
             '#computeTexture': this.#computeTexture,
             '#computeTextureView': this.#computeTextureView,
             '#computePipeline': this.#computePipeline,
@@ -486,10 +502,10 @@ class WaveformVisualizer {
     /**
      * Update uniform buffer for aspect ratio.
      */
-    updateUniformBuffer() {
-        if (!this.#gpuDevice || !this.#uniformBuffer) return;
-        const uniformData = new Float32Array([this.#boost, this.#gamma, this.#smoothingFactor, 0]);
-        this.#gpuDevice.queue.writeBuffer(this.#uniformBuffer, 0, uniformData.buffer, uniformData.byteOffset, uniformData.byteLength);
+    updateparamsBuffer() {
+        if (!this.#gpuDevice || !this.#paramsBuffer) return;
+        const paramsData = new Float32Array([this.#firstChannelPeak, this.#boost, this.#offset, 0.0]);
+        this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData.buffer, paramsData.byteOffset, paramsData.byteLength);
     }
 }
 

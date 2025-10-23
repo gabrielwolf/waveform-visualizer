@@ -1,7 +1,14 @@
+struct Params {
+    firstChannelPeak: f32,
+    boost: f32,
+    offset: f32,
+    _pad: f32
+};
+
 @group(0) @binding(0) var outImage: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(1) var<storage, read> waveform: array<f32>;
 @group(0) @binding(2) var<storage, read> peaks: array<f32>;
-@group(0) @binding(3) var<uniform> firstChannelMax: f32;
+@group(0) @binding(3) var<uniform> params: Params;
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
@@ -68,7 +75,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     for (var i = startSample; i < endSample && i < samplesPerChannel; i = i + 1u) {
         let index = i * channelCount + channelIndex;
         let rawValue = waveform[index];
-        let normalizedValue = rawValue / firstChannelMax;
+        let normalizedValue = rawValue / params.firstChannelPeak;
         if (normalizedValue > maxValue) {
             maxValue = normalizedValue;
         }
@@ -76,7 +83,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 
     let waveformIndex = startSample * channelCount + channelIndex;
     let rawPeakValue = peaks[waveformIndex];
-    let peakValue = (rawPeakValue / firstChannelMax) * 1.5 + 0.1;
+    let peakValue = (rawPeakValue / params.firstChannelPeak) * params.boost + params.offset;
 
     var waveformColor = vec4f(0.0);
     let lineCenter_pixel = channelHeight / 2u;
