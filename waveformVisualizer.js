@@ -39,8 +39,6 @@ class WaveformVisualizer {
     /** @type {GPUShaderModule | null} Compiled display shader module */
     #shaderDisplayModule;
 
-
-
     /** @type {GPUBuffer | null} Uniform buffer for parameters (boost, offset, etc.) */
     #paramsBuffer;
     /** @type {GPUBuffer | null} Uniform buffer for firstChannelMax */
@@ -304,14 +302,14 @@ class WaveformVisualizer {
         // Compute bind group layout (add binding 4 for firstChannelMax uniform)
         this.#computeBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
             entries: [
+                {binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
+                {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
+                {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // Params
                 {
-                    binding: 0,
+                    binding: 3,
                     visibility: GPUShaderStage.COMPUTE,
                     storageTexture: {access: "write-only", format: this.#canvasFormat}
                 },
-                {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
-                {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
-                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // Params
             ]
         });
 
@@ -391,10 +389,10 @@ class WaveformVisualizer {
         this.#computeBindGroup = this.#gpuDevice.createBindGroup({
             layout: this.#computeBindGroupLayout,
             entries: [
-                {binding: 0, resource: this.#computeTextureView},
-                {binding: 1, resource: {buffer: this.#waveformDataBuffer}},
-                {binding: 2, resource: {buffer: this.#backgroundDataBuffer}},
-                {binding: 3, resource: {buffer: this.#paramsBuffer}},
+                {binding: 0, resource: {buffer: this.#waveformDataBuffer}},
+                {binding: 1, resource: {buffer: this.#backgroundDataBuffer}},
+                {binding: 2, resource: {buffer: this.#paramsBuffer}},
+                {binding: 3, resource: this.#computeTextureView},
             ],
         });
 
