@@ -109,7 +109,6 @@ class WaveformVisualizer {
         return await response.json();
     }
 
-
     static computeChannelLayout(height, channelCount) {
         const baseHeight = Math.floor(height / channelCount);
         const remainder = height % channelCount;
