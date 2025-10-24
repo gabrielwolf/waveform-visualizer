@@ -282,7 +282,7 @@ class WaveformVisualizer {
             this.#firstChannelPeak,
             this.#boost,
             this.#offset,
-            0.0,
+            this.#channelCount,
             this.#canvas.width,
             this.#canvas.height
         ]);
@@ -321,13 +321,13 @@ class WaveformVisualizer {
             code: this.#shaderComputeWaveformCode,
         });
 
-        this.#firstChannelPeak = Math.max(...this.#waveformData.filter((_, i) => i % 16 === 0)); // channel 0
+        this.#firstChannelPeak = Math.max(...this.#waveformData.filter((_, i) => i % this.#channelCount === 0));
 
         const paramsData = new Float32Array([
             this.#firstChannelPeak,
             this.#boost,
             this.#offset,
-            0.0, // padding
+            this.#channelCount,
             this.#canvas.width,
             this.#canvas.height,
         ]);

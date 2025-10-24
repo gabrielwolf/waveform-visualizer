@@ -2,7 +2,7 @@ struct Params {
     firstChannelPeak: f32,
     boost: f32,
     offset: f32,
-    _pad: f32,
+    channelCount: f32,
     canvasWidth: f32,
     canvasHeight: f32,
 };

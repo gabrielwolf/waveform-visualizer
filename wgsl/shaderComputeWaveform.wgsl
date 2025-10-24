@@ -2,7 +2,7 @@ struct Params {
     firstChannelPeak: f32,
     boost: f32,
     offset: f32,
-    _pad: f32,
+    channelCount: f32,
     canvasWidth: f32,
     canvasHeight: f32,
 };
@@ -27,7 +27,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
 
-    let channelCount = 16u;
+    let channelCount = u32(params.channelCount);
 
     // Determine which channel this pixel belongs to
     var channelIndex = 0u;
