@@ -214,10 +214,10 @@ class WaveformVisualizer {
         }
 
         (async () => {
-            this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
+            this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('../wgsl/shaderComputeWaveform.wgsl');
 
-            this.#waveformData = await WaveformVisualizer.loadBinaryFile('./mean.bin');
-            this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./peak.bin');
+            this.#waveformData = await WaveformVisualizer.loadBinaryFile('../binaries/mean.bin');
+            this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./binaries/peak.bin');
 
             await this.#setupPipeline();
             this.updateParamsBuffer();
@@ -304,7 +304,7 @@ class WaveformVisualizer {
      * Sets up compute and rendering pipeline
      */
     async #setupPipeline() {
-        this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('./shaderComputeWaveform.wgsl');
+        this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('../wgsl/shaderComputeWaveform.wgsl');
         this.#shaderComputeWaveformModule = this.#gpuDevice.createShaderModule({
             code: this.#shaderComputeWaveformCode,
         });
@@ -402,7 +402,7 @@ class WaveformVisualizer {
 
         // ------------ 2nd pass ------------
 
-        this.#shaderDisplayCode = await WaveformVisualizer.loadShader('./shaderDisplay.wgsl');
+        this.#shaderDisplayCode = await WaveformVisualizer.loadShader('../wgsl/shaderDisplay.wgsl');
         this.#shaderDisplayModule = this.#gpuDevice.createShaderModule({
             code: this.#shaderDisplayCode,
         });
