@@ -291,13 +291,13 @@ class WaveformVisualizer {
         const {offsets, heights} = WaveformVisualizer.computeChannelLayout(this.#canvas.height, this.#channelCount);
         const layoutData = new Float32Array(4 * 4 * 2); // 4 vec4s for offsets + 4 vec4s for heights
         // Fill offsets vec4s
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < this.#channelCount; i++) {
             const group = Math.floor(i / 4);
             const sub = i % 4;
             layoutData[group * 4 + sub] = offsets[i];  // vec4 group i
         }
         // Fill heights vec4s
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < this.#channelCount; i++) {
             const group = Math.floor(i / 4);
             const sub = i % 4;
             layoutData[16 + group * 4 + sub] = heights[i]; // start heights at index 16
@@ -351,13 +351,13 @@ class WaveformVisualizer {
         const {offsets, heights} = WaveformVisualizer.computeChannelLayout(this.#canvas.height, this.#channelCount);
         const layoutData = new Float32Array(4 * 4 * 2); // 4 vec4s for offsets + 4 vec4s for heights
         // Fill offsets vec4s
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < this.#channelCount; i++) {
             const group = Math.floor(i / 4);
             const sub = i % 4;
             layoutData[group * 4 + sub] = offsets[i];  // vec4 group i
         }
         // Fill heights vec4s
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < this.#channelCount; i++) {
             const group = Math.floor(i / 4);
             const sub = i % 4;
             layoutData[16 + group * 4 + sub] = heights[i]; // start heights at index 16
