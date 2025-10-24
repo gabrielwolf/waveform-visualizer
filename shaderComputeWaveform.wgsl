@@ -101,7 +101,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     }
 
     let maskColor = vec2<f32>(peakValue, 1.0);
-    let brightness = f32(min(waveformColor.x, maskColor.y));
+    let brightness = f32(min(waveformColor.x, maskColor.x));
     let alpha = waveformColor.y;
 
     let index = gid.y * width + gid.x;
