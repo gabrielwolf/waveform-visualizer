@@ -1,13 +1,13 @@
 # A WebGPU HDR audio waveform visualizer
 
-The visualizer uses a binary format to cary information to the browser. These files contain peak or mean audio values.
-It is subset of the original audio data, enough to fill a 4K display, stored as interleaved uint16 values.
+The visualizer uses a binary format to cary information to the browser. These files contain peak and mean audio values.
+The data is subset of the original audio data, enough to fill a 4K display, packed as interleaved float32 values.
 
-To create *peak.bin* and *mean.bin* files we need *.raw audio first:
+1. Create an intermediate 32-bit float *.raw audio file (input bitrate doesn't matter) for now 16 channels are hardcoded:  
+`$ ffmpeg -i input.caf -f f32le -ac 16 output.raw`
 
-`$ ffmpeg -i input.caf -f s16le -ac 16 output.raw`
+2. To create *peak.bin* and *mean.bin* run `python generate-bins.py` script.  
 
-16 bit is enough as HDR up to 4000 nits is specified with 12 bit, and anyone apart from professional colorists has
-a monitor that can go that bright as of 2025.
+3. Open a common HTTP server in the root directory, because of security policy in browsers.
 
-As second step we run `python generate-bins.py` script. Done.
+That's it. :-)

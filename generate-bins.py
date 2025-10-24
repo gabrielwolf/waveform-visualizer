@@ -2,8 +2,8 @@ import numpy as np
 from scipy.signal import resample
 
 num_channels = 16
-image_width = 4096  # target horizontal pixels
-input_file = "output.raw"
+image_width = 4096          # target horizontal pixels
+input_file = "output.raw"   # it has to be float32
 
 def true_peak(segment, upsample=4):
     """
