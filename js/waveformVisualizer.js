@@ -30,6 +30,8 @@ class WaveformVisualizer {
     /** @type {GPUDevice | null} WebGPU device used for compute & render */
     #gpuDevice;
 
+    #metaData;
+
     /** @type {string | null} WGSL shader code for compute waveform */
     #shaderComputeWaveformCode;
     /** @type {GPUShaderModule | null} Compiled compute shader module */
@@ -98,6 +100,13 @@ class WaveformVisualizer {
         const arrayBuffer = await response.arrayBuffer();
         return new Float32Array(arrayBuffer);
     }
+
+    static async loadMeta(url) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to load meta data: ${url}`);
+        return await response.json();
+    }
+
 
     static computeChannelLayout(height, channelCount) {
         const baseHeight = Math.floor(height / channelCount);
@@ -175,7 +184,7 @@ class WaveformVisualizer {
         this.#displayTextureMSAA = null;
         this.#boost = 1.5;
         this.#offset = 0.1;
-        this.#channelCount = 16;
+        this.#channelCount = null;
         this.#firstChannelMaximumBuffer = null;
         this.#computePipeline = null;
         this.#computeBindGroupLayout = null;
@@ -216,6 +225,9 @@ class WaveformVisualizer {
         (async () => {
             this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('../wgsl/shaderComputeWaveform.wgsl');
 
+            // Layout of the json: {input_file: 'input.caf', channel_count: 4, sample_count: 11811656, image_width: 4096}
+            this.#metaData = await WaveformVisualizer.loadMeta('../binaries/waveform.json');
+            this.#channelCount = this.#metaData.channel_count;
             this.#waveformData = await WaveformVisualizer.loadBinaryFile('../binaries/mean.bin');
             this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./binaries/peak.bin');
 
