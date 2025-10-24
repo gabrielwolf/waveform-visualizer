@@ -41,6 +41,8 @@ class WaveformVisualizer {
 
     /** @type {GPUBuffer | null} Uniform buffer for parameters (boost, offset, etc.) */
     #paramsBuffer;
+    /** @type {GPUBuffer | null} Channel height and offset buffer */
+    #channelLayoutBuffer;
     /** @type {GPUBuffer | null} Uniform buffer for firstChannelMax */
     #firstChannelMaximumBuffer;
     /** @type {GPUTexture | null} MSAA texture for display */
@@ -61,6 +63,7 @@ class WaveformVisualizer {
     #computeBindGroupLayout;
     /** @type {GPUBindGroup | null} Bind group linking buffers & textures for compute */
     #computeBindGroup;
+    /** @type {GPUBuffer | null} Two dimensional array containing greyscale values on x and alpha on y as buffer */
     #computeOutputBuffer;
 
     /** @type {GPUPipelineLayout | null} Pipeline layout for display */
@@ -94,6 +97,39 @@ class WaveformVisualizer {
         if (!response.ok) throw new Error(`Failed to load binary file: ${url}`);
         const arrayBuffer = await response.arrayBuffer();
         return new Float32Array(arrayBuffer);
+    }
+
+    static computeChannelLayout(height, channelCount) {
+        const baseHeight = Math.floor(height / channelCount);
+        const remainder = height % channelCount;
+        const extraForChannel = new Array(channelCount).fill(0);
+        let remaining = remainder;
+        let offset = 0;
+        while (remaining > 0) {
+            const leftIndex = Math.floor(channelCount / 2) - 1 - offset;
+            const rightIndex = Math.floor(channelCount / 2) + offset;
+            if (leftIndex >= 0 && remaining > 0) {
+                extraForChannel[leftIndex] = 1;
+                remaining--;
+            }
+            if (remaining === 0) break;
+            if (rightIndex < channelCount && remaining > 0) {
+                extraForChannel[rightIndex] = 1;
+                remaining--;
+            }
+            offset++;
+        }
+
+        const offsets = new Array(channelCount).fill(0);
+        const heights = new Array(channelCount).fill(0);
+        let acc = 0;
+        for (let i = 0; i < channelCount; i++) {
+            const h = baseHeight + extraForChannel[i];
+            offsets[i] = acc;
+            heights[i] = h;
+            acc += h;
+        }
+        return {offsets, heights};
     }
 
     /**
@@ -135,6 +171,7 @@ class WaveformVisualizer {
         this.#shaderDisplayCode = null;
         this.#shaderDisplayModule = null;
         this.#paramsBuffer = null;
+        this.#channelLayoutBuffer = null;
         this.#displayTextureMSAA = null;
         this.#boost = 1.5;
         this.#offset = 0.1;
@@ -185,7 +222,7 @@ class WaveformVisualizer {
             this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./peak.bin');
 
             await this.#setupPipeline();
-            this.updateparamsBuffer();
+            this.updateParamsBuffer();
 
             this.#resizeTextures();
             this.#setupBindGroups();
@@ -260,6 +297,27 @@ class WaveformVisualizer {
         });
         this.#gpuDevice.queue.writeBuffer(this.#firstChannelMaximumBuffer, 0, firstChannelMaxValue);
 
+        const {offsets, heights} = WaveformVisualizer.computeChannelLayout(this.#canvas.height, this.#channelCount);
+        const layoutData = new Float32Array(4 * 4 * 2); // 4 vec4s for offsets + 4 vec4s for heights
+        // Fill offsets vec4s
+        for (let i = 0; i < 16; i++) {
+            const group = Math.floor(i / 4);
+            const sub = i % 4;
+            layoutData[group * 4 + sub] = offsets[i];  // vec4 group i
+        }
+        // Fill heights vec4s
+        for (let i = 0; i < 16; i++) {
+            const group = Math.floor(i / 4);
+            const sub = i % 4;
+            layoutData[16 + group * 4 + sub] = heights[i]; // start heights at index 16
+        }
+
+        this.#channelLayoutBuffer = this.#gpuDevice.createBuffer({
+            size: layoutData.byteLength,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        this.#gpuDevice.queue.writeBuffer(this.#channelLayoutBuffer, 0, layoutData);
+
         this.#waveformDataBuffer = this.#gpuDevice.createBuffer({
             size: this.#waveformData.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -275,7 +333,6 @@ class WaveformVisualizer {
         // Create compute output buffer (brightness + alpha pairs)
         const outputElementCount = this.#canvas.width * this.#canvas.height;
         const outputBufferSize = outputElementCount * 2 * 4; // vec2<f32> = 8 bytes per pixel
-        console.log("Canvas size:", this.#canvas.width, this.#canvas.height, "Output buffer size:", outputBufferSize);
 
         this.#computeOutputBuffer = this.#gpuDevice.createBuffer({
             size: outputBufferSize,
@@ -289,6 +346,7 @@ class WaveformVisualizer {
                 {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
                 {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // Params
                 {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "storage"}}, // computeOutput buffer
+                {binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}},          // channelLayout
             ]
         });
 
@@ -371,6 +429,7 @@ class WaveformVisualizer {
                 {binding: 1, resource: {buffer: this.#backgroundDataBuffer}},
                 {binding: 2, resource: {buffer: this.#paramsBuffer}},
                 {binding: 3, resource: {buffer: this.#computeOutputBuffer}},
+                {binding: 4, resource: {buffer: this.#channelLayoutBuffer}},
             ],
         });
 
@@ -388,7 +447,6 @@ class WaveformVisualizer {
      * Main render loop (stub for compute-based approach).
      */
     #renderLoop() {
-        // TODO here we maybe need to reinitialize the last remaining texture, or delete that!
         if (!this.#displayTextureMSAA) {
             this.#resizeTextures();
         }
@@ -476,9 +534,17 @@ class WaveformVisualizer {
     /**
      * Update uniform buffer for aspect ratio.
      */
-    updateparamsBuffer() {
+    updateParamsBuffer() {
         if (!this.#gpuDevice || !this.#paramsBuffer) return;
-        const paramsData = new Float32Array([this.#firstChannelPeak, this.#boost, this.#offset, 0.0, this.#canvas.width, this.#canvas.height]);
+        const paramsData = new Float32Array(
+            [
+                this.#firstChannelPeak,
+                this.#boost,
+                this.#offset,
+                0.0,
+                this.#canvas.width,
+                this.#canvas.height
+            ]);
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData.buffer, paramsData.byteOffset, paramsData.byteLength);
     }
 }

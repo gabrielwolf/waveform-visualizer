@@ -3,8 +3,8 @@ struct Params {
     boost: f32,
     offset: f32,
     _pad: f32,
-    width: f32,
-    height: f32,
+    canvasWidth: f32,
+    canvasHeight: f32,
 };
 
 @group(0) @binding(0) var<storage, read_write> computeOutput : array<vec2<f32>>;
@@ -30,9 +30,9 @@ fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {
 
 @fragment
 fn fs_main(input: VSOut) -> @location(0) vec4f {
-    let width = u32(params.width);
-    let height = u32(params.height);
-    let index = u32(floor(input.uv.y * f32(height))) * width + u32(floor(input.uv.x * f32(width)));
+    let canvasWidth = u32(params.canvasWidth);
+    let canvasHeight = u32(params.canvasHeight);
+    let index = u32(floor(input.uv.y * f32(canvasHeight))) * canvasWidth + u32(floor(input.uv.x * f32(canvasWidth)));
     let data = computeOutput[index];
     return vec4f(data.x, data.x, data.x, data.y);
 }

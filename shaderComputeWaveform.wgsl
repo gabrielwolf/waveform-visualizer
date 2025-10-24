@@ -3,77 +3,62 @@ struct Params {
     boost: f32,
     offset: f32,
     _pad: f32,
-    width: f32,
-    height: f32,
+    canvasWidth: f32,
+    canvasHeight: f32,
+};
+
+struct ChannelLayout {
+    // 16 channels packed into 4 vec4s (16-byte aligned)
+    channelOffset: array<vec4<f32>, 4>,
+    channelHeight: array<vec4<f32>, 4>,
 };
 
 @group(0) @binding(0) var<storage, read> waveform: array<f32>;
 @group(0) @binding(1) var<storage, read> peaks: array<f32>;
 @group(0) @binding(2) var<uniform> params: Params;
-@group(0) @binding(3) var<storage, read_write> computeOutput : array<vec2<f32>>;
+@group(0) @binding(3) var<storage, read_write> computeOutput: array<vec2<f32>>;
+@group(0) @binding(4) var<uniform> channelLayout: ChannelLayout;
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
-    let width = u32(params.width);
-    let height = u32(params.height);
-    if (gid.x >= width || gid.y >= height) {
+    let canvasWidth = u32(params.canvasWidth);
+    let canvasHeight = u32(params.canvasHeight);
+    if (gid.x >= canvasWidth || gid.y >= canvasHeight) {
         return;
     }
 
     let channelCount = 16u;
-    let baseHeight = height / channelCount;
-    let remainder = height % channelCount;
 
-    // Compute which channels get the extra pixel: distributed from the center outward
-    var extraForChannel = array<u32, 16u>();
-    if (remainder > 0u) {
-        var remaining = remainder;
-        var offset = 0u;
-        loop {
-            if (remaining == 0u) { break; }
-            let leftIndex = i32(channelCount / 2u) - 1 - i32(offset);
-            let rightIndex = i32(channelCount / 2u) + i32(offset);
-            if (leftIndex >= 0 && remaining > 0u) {
-                extraForChannel[u32(leftIndex)] = 1u;
-                remaining -= 1u;
-            }
-            if (remaining == 0u) { break; }
-            if (rightIndex < i32(channelCount) && remaining > 0u) {
-                extraForChannel[u32(rightIndex)] = 1u;
-                remaining -= 1u;
-            }
-            offset += 1u;
-        }
-    }
-
-    var y = gid.y;
-    var accumulated = 0u;
+    // Determine which channel this pixel belongs to
     var channelIndex = 0u;
-
-    loop {
-        let h = baseHeight + extraForChannel[channelIndex];
-        if (y < accumulated + h) {
-            break;
-        }
-        accumulated += h;
-        channelIndex += 1u;
-        if (channelIndex >= channelCount) {
+    let y = f32(gid.y);
+    for (var i = 0u; i < channelCount; i = i + 1u) {
+        let group = i / 4u;
+        let sub = i % 4u;
+        let offset = channelLayout.channelOffset[group][sub];
+        let chHeight = channelLayout.channelHeight[group][sub];
+        if (y >= offset && y < offset + chHeight) {
+            channelIndex = i;
             break;
         }
     }
 
-    channelIndex = channelCount - 1u - channelIndex;
+    // Get offset and height for the channel
+    let group = channelIndex / 4u;
+    let sub = channelIndex % 4u;
+    let channelOffset = channelLayout.channelOffset[group][sub];
+    let channelHeight = channelLayout.channelHeight[group][sub];
 
-    let localY_pixel = y - accumulated;
-    let channelHeight = baseHeight + extraForChannel[channelIndex];
-
+    // Local Y relative to channel
+    let localY_pixel = y - channelOffset;
     let samplesPerChannel = arrayLength(&waveform) / channelCount;
 
-    // Compute sample range per pixel
-    let samplesPerPixel = f32(samplesPerChannel) / f32(width);
+    // Compute sample range for this pixel
+    let samplesPerPixel = f32(samplesPerChannel) / f32(canvasWidth);
     let startSample = u32(floor(f32(gid.x) * samplesPerPixel));
     let endSample = u32(floor(f32(gid.x + 1u) * samplesPerPixel));
 
+    // Compute max waveform value for this pixel
     var maxValue = 0.0;
     for (var i = startSample; i < endSample && i < samplesPerChannel; i = i + 1u) {
         let index = i * channelCount + channelIndex;
@@ -84,26 +69,27 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
         }
     }
 
+    // Get peak value for color/brightness
     let waveformIndex = startSample * channelCount + channelIndex;
     let rawPeakValue = peaks[waveformIndex];
     let peakValue = (rawPeakValue / params.firstChannelPeak) * params.boost + params.offset;
 
-    var waveformColor = vec2<f32>(0.0, 0.0);
-    let lineCenter_pixel = channelHeight / 2u;
-    let halfHeight_pixel = u32(maxValue * 0.5 * f32(channelHeight) + 0.5);
-    let y_down = i32(lineCenter_pixel) - i32(halfHeight_pixel);
-    let y_up   = i32(lineCenter_pixel) + i32(halfHeight_pixel);
-    let localY = i32(localY_pixel);
+    // Compute stripe for waveform
+    let lineCenter_pixel = channelHeight / 2.0;
+    let halfHeight_pixel = maxValue * 0.5 * channelHeight;
+    let y_down = lineCenter_pixel - halfHeight_pixel;
+    let y_up   = lineCenter_pixel + halfHeight_pixel;
 
-    // Center line
-    if (localY >= y_down && localY <= y_up) {
+    var waveformColor = vec2<f32>(0.0, 0.0);
+    if (localY_pixel >= y_down && localY_pixel <= y_up) {
         waveformColor = vec2<f32>(1.0, 1.0);
     }
 
+    // Use peakValue as brightness for mask
     let maskColor = vec2<f32>(peakValue, 1.0);
-    let brightness = f32(min(waveformColor.x, maskColor.x));
+    let brightness = min(waveformColor.x, maskColor.x);
     let alpha = waveformColor.y;
 
-    let index = gid.y * width + gid.x;
+    let index = gid.y * canvasWidth + gid.x;
     computeOutput[index] = vec2<f32>(brightness, alpha);
 }
