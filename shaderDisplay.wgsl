@@ -2,7 +2,7 @@ struct Params {
     firstChannelPeak: f32,
     boost: f32,
     offset: f32,
-    _pad: f32,             // padding to align next vec2 to 16 bytes
+    _pad: f32,
     width: f32,
     height: f32,
 };
