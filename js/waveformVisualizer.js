@@ -334,6 +334,7 @@ class WaveformVisualizer {
         this.#gpuDevice.queue.writeBuffer(this.#channelLayoutBuffer, 0, layoutData);
 
         this.#setupBindGroups();
+        this.#renderSingleFrame();
     }
 
     /**
@@ -507,44 +508,46 @@ class WaveformVisualizer {
         });
     }
 
+    #renderSingleFrame() {
+        if (!this.#gpuDevice || !this.#computePipeline || !this.#computeBindGroup || !this.#displayPipeline
+            || !this.#displayBindGroup || !this.#paramsBuffer) {
+            return;
+        }
+
+        const encoder = this.#gpuDevice.createCommandEncoder();
+
+        // --- Compute pass ---
+        const computePass = encoder.beginComputePass();
+        computePass.setPipeline(this.#computePipeline);
+        computePass.setBindGroup(0, this.#computeBindGroup);
+        const workgroupsX = Math.ceil(this.#canvas.width / 8);
+        const workgroupsY = Math.ceil(this.#canvas.height / 8);
+        computePass.dispatchWorkgroups(workgroupsX, workgroupsY);
+        computePass.end();
+
+        // --- Render pass ---
+        const renderPass = encoder.beginRenderPass({
+            colorAttachments: [{
+                view: this.#context.getCurrentTexture().createView(),
+                loadOp: 'clear',
+                storeOp: 'store',
+                clearValue: {r: 0, g: 0, b: 0, a: 1},
+            }]
+        });
+        renderPass.setPipeline(this.#displayPipeline);
+        renderPass.setBindGroup(0, this.#displayBindGroup);
+        renderPass.draw(6, 1, 0, 0);
+        renderPass.end();
+
+        this.#gpuDevice.queue.submit([encoder.finish()]);
+    }
+
     /**
      * Main render loop (stub for compute-based approach).
      */
     #renderLoop() {
-
         const frame = () => {
-            if (!this.#gpuDevice || !this.#computePipeline || !this.#computeBindGroup || !this.#displayPipeline
-                || !this.#displayBindGroup || !this.#paramsBuffer) {
-                requestAnimationFrame(frame);
-                return;
-            }
-
-            const encoder = this.#gpuDevice.createCommandEncoder();
-
-            // --- Compute pass ---
-            const computePass = encoder.beginComputePass();
-            computePass.setPipeline(this.#computePipeline);
-            computePass.setBindGroup(0, this.#computeBindGroup);
-            const workgroupsX = Math.ceil(this.#canvas.width / 8);
-            const workgroupsY = Math.ceil(this.#canvas.height / 8);
-            computePass.dispatchWorkgroups(workgroupsX, workgroupsY);
-            computePass.end();
-
-            // --- Render pass (display to canvas) ---
-            const renderPass = encoder.beginRenderPass({
-                colorAttachments: [{
-                    view: this.#context.getCurrentTexture().createView(),
-                    loadOp: 'clear',
-                    storeOp: 'store',
-                    clearValue: {r: 0, g: 0, b: 0, a: 1},
-                }]
-            });
-            renderPass.setPipeline(this.#displayPipeline);
-            renderPass.setBindGroup(0, this.#displayBindGroup);
-            renderPass.draw(6, 1, 0, 0);
-            renderPass.end();
-
-            this.#gpuDevice.queue.submit([encoder.finish()]);
+            this.#renderSingleFrame();
             requestAnimationFrame(frame);
         };
         requestAnimationFrame(frame);
