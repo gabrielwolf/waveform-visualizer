@@ -203,8 +203,6 @@ class WaveformVisualizer {
             this.#canvasColorSpace = context.colorSpace;
             this.#internalFormat = context.internalFormat;
 
-            this.#displayTextureMSAA?.destroy();
-
             this.#setupPipeline();
             this.#resizeTextures();
             this.#setupBindGroups();
@@ -250,6 +248,8 @@ class WaveformVisualizer {
         this.#canvas.height = Math.max(1, Math.floor(this.#canvas.clientHeight * this.#devicePixelRatio));
 
         this.#displayTextureMSAA?.destroy();
+        this.#computeOutputBuffer?.destroy();
+        this.#channelLayoutBuffer?.destroy();
 
         this.#displayTextureMSAA = this.#gpuDevice.createTexture({
             size: [this.#canvas.width, this.#canvas.height],
@@ -257,6 +257,45 @@ class WaveformVisualizer {
             format: this.#canvasFormat,
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
+
+        const outputElementCount = this.#canvas.width * this.#canvas.height;
+        const outputBufferSize = outputElementCount * 2 * 4; // vec2<f32> per pixel
+
+        this.#computeOutputBuffer = this.#gpuDevice.createBuffer({
+            size: outputBufferSize,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        });
+
+        const paramsData = new Float32Array([
+            this.#firstChannelPeak,
+            this.#boost,
+            this.#offset,
+            0.0,
+            this.#canvas.width,
+            this.#canvas.height
+        ]);
+        this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
+
+        const {offsets, heights} = WaveformVisualizer.computeChannelLayout(this.#canvas.height, this.#channelCount);
+        const layoutData = new Float32Array(4 * 4 * 2); // 4 vec4s for offsets + 4 vec4s for heights
+        // Fill offsets vec4s
+        for (let i = 0; i < 16; i++) {
+            const group = Math.floor(i / 4);
+            const sub = i % 4;
+            layoutData[group * 4 + sub] = offsets[i];  // vec4 group i
+        }
+        // Fill heights vec4s
+        for (let i = 0; i < 16; i++) {
+            const group = Math.floor(i / 4);
+            const sub = i % 4;
+            layoutData[16 + group * 4 + sub] = heights[i]; // start heights at index 16
+        }
+
+        this.#channelLayoutBuffer = this.#gpuDevice.createBuffer({
+            size: layoutData.byteLength,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        this.#gpuDevice.queue.writeBuffer(this.#channelLayoutBuffer, 0, layoutData);
 
         this.#setupBindGroups();
     }
