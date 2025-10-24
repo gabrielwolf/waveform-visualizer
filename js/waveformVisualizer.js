@@ -45,8 +45,8 @@ class WaveformVisualizer {
     #paramsBuffer;
     /** @type {GPUBuffer | null} Channel height and offset buffer */
     #channelLayoutBuffer;
-    /** @type {GPUBuffer | null} Uniform buffer for firstChannelMax */
-    #firstChannelMaximumBuffer;
+    /** @type {GPUBuffer | null} Uniform buffer for firstChannelPeak */
+    #firstChannelPeakimumBuffer;
     /** @type {GPUTexture | null} MSAA texture for display */
     #displayTextureMSAA;
 
@@ -186,7 +186,7 @@ class WaveformVisualizer {
         this.#boost = 1.5;
         this.#offset = 0.1;
         this.#channelCount = null;
-        this.#firstChannelMaximumBuffer = null;
+        this.#firstChannelPeakimumBuffer = null;
         this.#computePipeline = null;
         this.#computeBindGroupLayout = null;
         this.#computeBindGroup = null;
@@ -365,14 +365,14 @@ class WaveformVisualizer {
         });
         this.#writeParamsBuffer();
 
-        // Uniform buffer for firstChannelMax (1 float)
-        const firstChannelMax = Math.max(...this.#waveformData.filter((_, i) => i % 16 === 0)); // channel 0
-        const firstChannelMaxValue = new Float32Array([firstChannelMax]);
-        this.#firstChannelMaximumBuffer = this.#gpuDevice.createBuffer({
+        // Uniform buffer for firstChannelPeak (1 float)
+        const firstChannelPeak = Math.max(...this.#waveformData.filter((_, i) => i % 16 === 0)); // channel 0
+        const firstChannelPeakValue = new Float32Array([firstChannelPeak]);
+        this.#firstChannelPeakimumBuffer = this.#gpuDevice.createBuffer({
             size: 4,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
-        this.#gpuDevice.queue.writeBuffer(this.#firstChannelMaximumBuffer, 0, firstChannelMaxValue);
+        this.#gpuDevice.queue.writeBuffer(this.#firstChannelPeakimumBuffer, 0, firstChannelPeakValue);
 
         const {offsets, heights} = WaveformVisualizer.computeChannelLayout(this.#canvas.height, this.#channelCount);
         const vec4sPerArray = 16;
@@ -414,7 +414,7 @@ class WaveformVisualizer {
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
         });
 
-        // Compute bind group layout (add binding 4 for firstChannelMax uniform)
+        // Compute bind group layout (add binding 4 for firstChannelPeak uniform)
         this.#computeBindGroupLayout = this.#gpuDevice.createBindGroupLayout({
             entries: [
                 {binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
@@ -496,7 +496,7 @@ class WaveformVisualizer {
             return;
         }
 
-        // Compute bind group (add binding 4 for firstChannelMax uniform buffer)
+        // Compute bind group (add binding 4 for firstChannelPeak uniform buffer)
         this.#computeBindGroup = this.#gpuDevice.createBindGroup({
             layout: this.#computeBindGroupLayout,
             entries: [
