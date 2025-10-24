@@ -345,8 +345,8 @@ class WaveformVisualizer {
                 {binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // mean waveform
                 {binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: {type: "read-only-storage"}}, // peak background
                 {binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // Params
-                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "storage"}}, // computeOutput buffer
-                {binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}},          // channelLayout
+                {binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: {type: "uniform"}}, // channelLayout
+                {binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: {type: "storage"}}, // computeOutput buffer
             ]
         });
 
@@ -428,8 +428,8 @@ class WaveformVisualizer {
                 {binding: 0, resource: {buffer: this.#waveformDataBuffer}},
                 {binding: 1, resource: {buffer: this.#backgroundDataBuffer}},
                 {binding: 2, resource: {buffer: this.#paramsBuffer}},
-                {binding: 3, resource: {buffer: this.#computeOutputBuffer}},
-                {binding: 4, resource: {buffer: this.#channelLayoutBuffer}},
+                {binding: 3, resource: {buffer: this.#channelLayoutBuffer}},
+                {binding: 4, resource: {buffer: this.#computeOutputBuffer}},
             ],
         });
 
@@ -452,8 +452,6 @@ class WaveformVisualizer {
         }
 
         const frame = () => {
-            // console.log(this.checkWaveformVisualizerResources());
-
             if (!this.#gpuDevice || !this.#computePipeline || !this.#computeBindGroup || !this.#displayPipeline
                 || !this.#displayBindGroup || !this.#displayTextureMSAA || !this.#paramsBuffer) {
                 requestAnimationFrame(frame);
@@ -489,46 +487,6 @@ class WaveformVisualizer {
             requestAnimationFrame(frame);
         };
         requestAnimationFrame(frame);
-    }
-
-    checkWaveformVisualizerResources() {
-        const varsToCheck = {
-            '#canvas': this.#canvas,
-            '#canvasFormat': this.#canvasFormat,
-            '#canvasColorSpace': this.#canvasColorSpace,
-            '#internalFormat': this.#internalFormat,
-            '#context': this.#context,
-            '#gpuDevice': this.#gpuDevice,
-            '#shaderComputeWaveformCode': this.#shaderComputeWaveformCode,
-            '#shaderComputeWaveformModule': this.#shaderComputeWaveformModule,
-            '#shaderDisplayCode': this.#shaderDisplayCode,
-            '#shaderDisplayModule': this.#shaderDisplayModule,
-            '#paramsBuffer': this.#paramsBuffer,
-            '#displayTextureMSAA': this.#displayTextureMSAA,
-            '#firstChannelPeak': this.#firstChannelPeak,
-            '#boost': this.#boost,
-            '#offset': this.#offset,
-            '#computePipeline': this.#computePipeline,
-            '#computeBindGroupLayout': this.#computeBindGroupLayout,
-            '#computeBindGroup': this.#computeBindGroup,
-            '#displayPipelineLayout': this.#displayPipelineLayout,
-            '#displayPipeline': this.#displayPipeline,
-            '#displayBindGroupLayout': this.#displayBindGroupLayout,
-            '#displayBindGroup': this.#displayBindGroup,
-            '#displaySampler': this.#displaySampler,
-            '#waveformData': this.#waveformData,
-            '#backgroundData': this.#backgroundData,
-            '#backgroundDataBuffer': this.#backgroundDataBuffer,
-        };
-
-        const missing = [];
-        for (const [name, value] of Object.entries(varsToCheck)) {
-            if (value === null || value === undefined) {
-                missing.push(name);
-            }
-        }
-
-        return missing;
     }
 
     /**

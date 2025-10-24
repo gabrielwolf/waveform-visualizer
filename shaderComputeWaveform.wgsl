@@ -16,11 +16,11 @@ struct ChannelLayout {
 @group(0) @binding(0) var<storage, read> waveform: array<f32>;
 @group(0) @binding(1) var<storage, read> peaks: array<f32>;
 @group(0) @binding(2) var<uniform> params: Params;
-@group(0) @binding(3) var<storage, read_write> computeOutput: array<vec2<f32>>;
-@group(0) @binding(4) var<uniform> channelLayout: ChannelLayout;
+@group(0) @binding(3) var<uniform> channelLayout: ChannelLayout;
+@group(0) @binding(4) var<storage, read_write> computeOutput: array<vec2<f32>>;
 
 @compute @workgroup_size(8, 8)
-fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let canvasWidth = u32(params.canvasWidth);
     let canvasHeight = u32(params.canvasHeight);
     if (gid.x >= canvasWidth || gid.y >= canvasHeight) {
