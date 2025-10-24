@@ -5,8 +5,8 @@ struct Params {
     channelCount: f32,
     canvasWidth: f32,
     canvasHeight: f32,
-    maskGroup: vec3<f32>,  // groups of flac packets 1-4, 5-9 and 10-16 with their corresponding mask [0;1]
-    _pad: f32,
+    padding: vec2<f32>,
+    maskGroup: vec4<f32>,  // groups of flac packets 1-4, 5-9 and 10-16 with their corresponding mask [0;1]
 };
 
 // We need to correct for rounding errors
@@ -38,9 +38,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = 0u; i < channelCount; i = i + 1u) {
         let group = i / 4u;
         let sub = i % 4u;
-        let offset = channelLayout.channelOffset[group][sub];
-        let chHeight = channelLayout.channelHeight[group][sub];
-        if (y >= offset && y < offset + chHeight) {
+        let temporaryChannelOffset = channelLayout.channelOffset[group][sub];
+        let temporaryChannelHeight = channelLayout.channelHeight[group][sub];
+        if (y >= temporaryChannelOffset && y < temporaryChannelOffset + temporaryChannelHeight) {
             channelIndex = i;
             break;
         }
@@ -91,12 +91,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var maskGroupIndex: u32 = 0u;
 
     // Ambisonics masking groups: channels 1-4 → group 0, 5-9 → group 1, 10-16 → group 2
-    if (channelIndex <= 3u) {
+    if (channelIndex < 4u) {
         maskGroupIndex = 0u;
-    } else if (channelIndex <= 8u) {
+    } else if (channelIndex < 9u) {
         maskGroupIndex = 1u;
-    } else {
+    } else if (channelIndex < 16u) {
         maskGroupIndex = 2u;
+    } else {
+        maskGroupIndex = (channelIndex / 16u) % 3u;
     }
 
     // Use peakValue as brightness for mask
@@ -105,7 +107,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     var maskedPeak = peakValue;
     if (xFraction > maskFraction) {
-        maskedPeak = 1.0; // plain white
+        maskedPeak = 0.5;
     }
 
     let brightness = min(waveformColor.x, maskedPeak);

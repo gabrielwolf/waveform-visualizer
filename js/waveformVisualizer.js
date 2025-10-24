@@ -199,7 +199,7 @@ class WaveformVisualizer {
         this.#waveformDataBuffer = null;
         this.#backgroundData = null;
         this.#backgroundDataBuffer = null;
-        this.#maskGroup = [0.25, 0.75, 0.5];
+        this.#maskGroup = [0.25, 0.5, 0.75]; // demo loading state
 
         const gpuContextManager = GpuContextManager.init();
         this.#context = gpuContextManager.configureCanvas(this.#canvas);
@@ -248,6 +248,20 @@ class WaveformVisualizer {
             });
             resizeObserver.observe(this.#canvas);
         })();
+
+        setTimeout(() => {
+            this.maskGroup = {index: 0, value: 0.618}
+        }, 1500);
+        setTimeout(() => {
+            this.maskGroup = {index: 1, value: 0.75}
+        }, 2500);
+        setTimeout(() => {
+            this.maskGroup = {index: 2, value: 0.95}
+        }, 3500);
+    }
+
+    get maskGroup() {
+        return this.#maskGroup;
     }
 
     set maskGroup({index, value}) {
@@ -271,10 +285,11 @@ class WaveformVisualizer {
             this.#channelCount,
             this.#canvas.width,
             this.#canvas.height,
+            0.0, // padding
+            0.0, // padding
             this.#maskGroup[0],
             this.#maskGroup[1],
             this.#maskGroup[2],
-            0.0 // padding
         ]);
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
     }
@@ -364,8 +379,8 @@ class WaveformVisualizer {
         const layoutData = new Float32Array(vec4sPerArray * 4 * 2); // offsets + heights
         for (let i = 0; i < this.#channelCount; i++) {
             const group = Math.floor(i / 4); // vec4 index
-            const sub = i % 4;               // component within vec4
-            const offsetBase = group * 4;    // vec4 index * 4 floats
+            const sub = i % 4;                  // component within vec4
+            const offsetBase = group * 4;       // vec4 index * 4 floats
             const heightBase = vec4sPerArray * 4 + group * 4;
 
             layoutData[offsetBase + sub] = offsets[i];  // x/y/z/w depends on sub

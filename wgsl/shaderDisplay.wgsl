@@ -5,8 +5,7 @@ struct Params {
     channelCount: f32,
     canvasWidth: f32,
     canvasHeight: f32,
-    groupMask: vec3<f32>,
-    _pad: f32,
+    maskGroup: vec4<f32>,
 };
 
 @group(0) @binding(0) var<storage, read_write> computeOutput: array<vec2<f32>>;
