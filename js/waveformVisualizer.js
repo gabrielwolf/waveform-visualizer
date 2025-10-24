@@ -1,15 +1,21 @@
 import GpuContextManager from "./gpuContextManager.js";
 
 /**
- * Singleton class for rendering a real-time WaveformVisualizer
+ * Singleton class for rendering a real-time WaveformVisualizer using WebGPU
+ * Handles:
+ * - Loading waveform binary and JSON metadata
+ * - Setting up compute and display pipelines
+ * - Rendering multiple audio channels with configurable intensity and offsets
  *
  * Usage:
  *    import WaveformVisualizer from './waveformVisualizer.js';
  *    const waveformVisualizer = WaveformVisualizer.init(document.querySelector('canvas'), gpuDevice);
+ * @singleton
  */
 
 /** @typedef {import('webgpu-types').GPUBufferUsage} GPUBufferUsage */
 
+// do it like this with vitejs
 // import shaderComputeWaveformUrl from '@/shaderComputeWaveform.wgsl?raw';
 
 class WaveformVisualizer {
@@ -29,7 +35,15 @@ class WaveformVisualizer {
     #context;
     /** @type {GPUDevice | null} WebGPU device used for compute & render */
     #gpuDevice;
-
+    /**
+     * @type {Object|null} Metadata loaded from waveform.json, e.g.:
+     * {
+     *   input_file: string,
+     *   channel_count: number,
+     *   sample_count: number,
+     *   image_width: number
+     * }
+     */
     #metaData;
 
     /** @type {string | null} WGSL shader code for compute waveform */
@@ -88,12 +102,24 @@ class WaveformVisualizer {
     /** @type {array<number> | null} Download progress for the flac packages */
     #maskGroup;
 
+    /**
+     * Loads a shader.wgsl file and returns its contents as text.
+     *
+     * @param {string} url - URL of the shader file.
+     * @returns {Promise<string>} The shader as string.
+     */
     static async loadShader(url) {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to load shader: ${url}`);
         return await response.text();
     }
 
+    /**
+     * Loads a binary file and returns its contents as a Float32Array.
+     *
+     * @param {string} url - URL of the binary file.
+     * @returns {Promise<Float32Array>} The binary data as Float32Array.
+     */
     static async loadBinaryFile(url) {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to load binary file: ${url}`);
@@ -101,12 +127,32 @@ class WaveformVisualizer {
         return new Float32Array(arrayBuffer);
     }
 
+    /**
+     * Loads a JSON file and returns its contents as an object.
+     *
+     * @param {string} url - URL of the binary file.
+     * * @returns {Promise<Object>} The parsed JSON object.
+     */
     static async loadMeta(url) {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to load meta data: ${url}`);
         return await response.json();
     }
 
+    /**
+     * Computes per-channel vertical layout information for the waveform display.
+     *
+     * Each audio channel is assigned a vertical segment of the canvas. This method
+     * evenly divides the total height among channels, distributing any leftover
+     * pixels symmetrically around the center channel(s) to maintain visual balance.
+     *
+     * @param {number} height - Total canvas height in pixels.
+     * @param {number} channelCount - Number of audio channels to divide the height between.
+     * @returns {{offsets: number[], heights: number[]}}
+     * An object containing:
+     * - `offsets`: The starting Y offset (in pixels) for each channel.
+     * - `heights`: The computed height (in pixels) for each channel.
+     */
     static computeChannelLayout(height, channelCount) {
         const baseHeight = Math.floor(height / channelCount);
         const remainder = height % channelCount;
@@ -262,6 +308,10 @@ class WaveformVisualizer {
         this.#writeParamsBuffer();
     }
 
+    /**
+     * Writes the current visualization parameters to the GPU uniform buffer.
+     * Includes: first channel peak, boost, offset, channel count, canvas size, and mask group values.
+     */
     #writeParamsBuffer() {
         if (!this.#gpuDevice || !this.#paramsBuffer) return;
 
