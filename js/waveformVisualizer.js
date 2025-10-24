@@ -87,6 +87,8 @@ class WaveformVisualizer {
     #backgroundData;
     /** @type {GPUBuffer | null} Normalized background or peak data */
     #backgroundDataBuffer;
+    /** @type {array<number> | null} Download progress for the flac packages */
+    #groupMask;
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -198,6 +200,7 @@ class WaveformVisualizer {
         this.#waveformDataBuffer = null;
         this.#backgroundData = null;
         this.#backgroundDataBuffer = null;
+        this.#groupMask = [0.25, 0.75, 0.5];
 
         const gpuContextManager = GpuContextManager.init();
         this.#context = gpuContextManager.configureCanvas(this.#canvas);
@@ -249,6 +252,17 @@ class WaveformVisualizer {
         })();
     }
 
+    set groupMask({index, value}) {
+        if (isNaN(index) || index < 0 || index > 2) {
+            throw new Error(`Index must be 0, 1, or 2`);
+        }
+        if (isNaN(value) || value < 0 || value > 1) {
+            throw new Error(`Value must be between 0 and 1`);
+        }
+        this.#groupMask[index] = value;
+        this.updateParamsBuffer();
+    }
+
     /**
      * (Re)creates textures and updates bind groups on resize or format change.
      */
@@ -284,7 +298,11 @@ class WaveformVisualizer {
             this.#offset,
             this.#channelCount,
             this.#canvas.width,
-            this.#canvas.height
+            this.#canvas.height,
+            this.#groupMask[0],
+            this.#groupMask[1],
+            this.#groupMask[2],
+            0.0 // padding
         ]);
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
 
@@ -328,11 +346,15 @@ class WaveformVisualizer {
             this.#channelCount,
             this.#canvas.width,
             this.#canvas.height,
+            this.#groupMask[0],
+            this.#groupMask[1],
+            this.#groupMask[2],
+            0.0 // padding
         ]);
 
         // Create a uniform buffer for Params
         this.#paramsBuffer = this.#gpuDevice.createBuffer({
-            size: 32,
+            size: 48,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
@@ -546,9 +568,13 @@ class WaveformVisualizer {
                 this.#firstChannelPeak,
                 this.#boost,
                 this.#offset,
-                0.0,
+                this.#channelCount,
                 this.#canvas.width,
-                this.#canvas.height
+                this.#canvas.height,
+                this.#groupMask[0],
+                this.#groupMask[1],
+                this.#groupMask[2],
+                0.0 // padding
             ]);
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData.buffer, paramsData.byteOffset, paramsData.byteLength);
     }
