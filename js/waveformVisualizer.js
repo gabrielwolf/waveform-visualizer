@@ -246,15 +246,36 @@ class WaveformVisualizer {
             resizeObserver.observe(this.#canvas);
         })();
 
-        setTimeout(() => {
-            this.maskGroup = {index: 0, value: 0.618}
-        }, 1500);
-        setTimeout(() => {
-            this.maskGroup = {index: 1, value: 0.75}
-        }, 2500);
-        setTimeout(() => {
-            this.maskGroup = {index: 2, value: 0.95}
-        }, 3500);
+        setInterval(() => {
+            // read current value of first mask index
+            let currentValue = this.maskGroup[0];
+
+            // add a small increment and wrap around 1.0
+            currentValue = (currentValue + 0.01) % 1.0;
+
+            // apply the updated value back to maskGroup
+            this.maskGroup = {index: 0, value: currentValue};
+        }, 16);
+        setInterval(() => {
+            // read current value of first mask index
+            let currentValue = this.maskGroup[1];
+
+            // add a small increment and wrap around 1.0
+            currentValue = (currentValue + 0.01) % 1.0;
+
+            // apply the updated value back to maskGroup
+            this.maskGroup = {index: 1, value: currentValue};
+        }, 16);
+                setInterval(() => {
+            // read current value of first mask index
+            let currentValue = this.maskGroup[2];
+
+            // add a small increment and wrap around 1.0
+            currentValue = (currentValue + 0.01) % 1.0;
+
+            // apply the updated value back to maskGroup
+            this.maskGroup = {index: 2, value: currentValue};
+        }, 16);
     }
 
     get maskGroup() {
