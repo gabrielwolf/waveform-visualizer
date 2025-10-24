@@ -184,7 +184,7 @@ class WaveformVisualizer {
         this.#channelLayoutBuffer = null;
         this.#displayTextureMSAA = null;
         this.#boost = 1.5;
-        this.#offset = 0.1;
+        this.#offset = 0.2;
         this.#channelCount = null;
         this.#firstChannelPeakimumBuffer = null;
         this.#computePipeline = null;
