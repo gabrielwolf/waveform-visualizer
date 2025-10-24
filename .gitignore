@@ -3,3 +3,4 @@
 *.bin
 *.flac
 binaries/*.*
+tools/*.json
