@@ -5,7 +5,7 @@ struct Params {
     channelCount: f32,
     canvasWidth: f32,
     canvasHeight: f32,
-    groupMask: vec3<f32>,  // groups of flac packets 1-4, 5-9 and 10-16 with their corresponding mask [0;1]
+    maskGroup: vec3<f32>,  // groups of flac packets 1-4, 5-9 and 10-16 with their corresponding mask [0;1]
     _pad: f32,
 };
 
@@ -100,7 +100,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     // Use peakValue as brightness for mask
-    let maskFraction = params.groupMask[maskGroupIndex]; // 0..1
+    let maskFraction = params.maskGroup[maskGroupIndex]; // 0..1
     let xFraction = f32(gid.x) / f32(canvasWidth);       // horizontal fraction of pixel
 
     var maskedPeak = peakValue;

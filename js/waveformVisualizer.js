@@ -88,7 +88,7 @@ class WaveformVisualizer {
     /** @type {GPUBuffer | null} Normalized background or peak data */
     #backgroundDataBuffer;
     /** @type {array<number> | null} Download progress for the flac packages */
-    #groupMask;
+    #maskGroup;
 
     static async loadShader(url) {
         const response = await fetch(url);
@@ -199,7 +199,7 @@ class WaveformVisualizer {
         this.#waveformDataBuffer = null;
         this.#backgroundData = null;
         this.#backgroundDataBuffer = null;
-        this.#groupMask = [0.25, 0.75, 0.5];
+        this.#maskGroup = [0.25, 0.75, 0.5];
 
         const gpuContextManager = GpuContextManager.init();
         this.#context = gpuContextManager.configureCanvas(this.#canvas);
@@ -250,14 +250,14 @@ class WaveformVisualizer {
         })();
     }
 
-    set groupMask({index, value}) {
+    set maskGroup({index, value}) {
         if (isNaN(index) || index < 0 || index > 2) {
             throw new Error(`Index must be 0, 1, or 2`);
         }
         if (isNaN(value) || value < 0 || value > 1) {
             throw new Error(`Value must be between 0 and 1`);
         }
-        this.#groupMask[index] = value;
+        this.#maskGroup[index] = value;
         this.#writeParamsBuffer();
     }
 
@@ -271,9 +271,9 @@ class WaveformVisualizer {
             this.#channelCount,
             this.#canvas.width,
             this.#canvas.height,
-            this.#groupMask[0],
-            this.#groupMask[1],
-            this.#groupMask[2],
+            this.#maskGroup[0],
+            this.#maskGroup[1],
+            this.#maskGroup[2],
             0.0 // padding
         ]);
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
