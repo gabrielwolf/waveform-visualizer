@@ -47,8 +47,6 @@ class WaveformVisualizer {
     #channelLayoutBuffer;
     /** @type {GPUBuffer | null} Uniform buffer for firstChannelPeak */
     #firstChannelPeakimumBuffer;
-    /** @type {GPUTexture | null} MSAA texture for display */
-    #displayTextureMSAA;
 
     /** @type {number | null} Peak of first channel */
     #firstChannelPeak;
@@ -182,7 +180,6 @@ class WaveformVisualizer {
         this.#shaderDisplayModule = null;
         this.#paramsBuffer = null;
         this.#channelLayoutBuffer = null;
-        this.#displayTextureMSAA = null;
         this.#boost = 1.5;
         this.#offset = 0.2;
         this.#channelCount = null;
@@ -304,16 +301,8 @@ class WaveformVisualizer {
         this.#canvas.width = Math.max(1, Math.floor(this.#canvas.clientWidth * this.#devicePixelRatio));
         this.#canvas.height = Math.max(1, Math.floor(this.#canvas.clientHeight * this.#devicePixelRatio));
 
-        this.#displayTextureMSAA?.destroy();
         this.#computeOutputBuffer?.destroy();
         this.#channelLayoutBuffer?.destroy();
-
-        this.#displayTextureMSAA = this.#gpuDevice.createTexture({
-            size: [this.#canvas.width, this.#canvas.height],
-            sampleCount: 1,
-            format: this.#canvasFormat,
-            usage: GPUTextureUsage.RENDER_ATTACHMENT,
-        });
 
         const outputElementCount = this.#canvas.width * this.#canvas.height;
         const outputBufferSize = outputElementCount * 2 * 4; // vec2<f32> per pixel
@@ -522,13 +511,10 @@ class WaveformVisualizer {
      * Main render loop (stub for compute-based approach).
      */
     #renderLoop() {
-        if (!this.#displayTextureMSAA) {
-            this.#resizeTextures();
-        }
 
         const frame = () => {
             if (!this.#gpuDevice || !this.#computePipeline || !this.#computeBindGroup || !this.#displayPipeline
-                || !this.#displayBindGroup || !this.#displayTextureMSAA || !this.#paramsBuffer) {
+                || !this.#displayBindGroup || !this.#paramsBuffer) {
                 requestAnimationFrame(frame);
                 return;
             }
