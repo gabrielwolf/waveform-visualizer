@@ -32,7 +32,7 @@ fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {
 fn fs_main(input: VSOut) -> @location(0) vec4f {
     let canvasWidth = u32(params.canvasWidth);
     let canvasHeight = u32(params.canvasHeight);
-    let index = u32(floor(input.uv.y * f32(canvasHeight))) * canvasWidth + u32(floor(input.uv.x * f32(canvasWidth)));
-    let data = computeOutput[index];
+    let index = (canvasHeight - 1u - u32(floor(input.uv.y * f32(canvasHeight)))) * canvasWidth
+          + u32(floor(input.uv.x * f32(canvasWidth)));    let data = computeOutput[index];
     return vec4f(data.x, data.x, data.x, data.y);
 }
