@@ -10,7 +10,7 @@ import GpuContextManager from "./gpuContextManager.js";
 
 /** @typedef {import('webgpu-types').GPUBufferUsage} GPUBufferUsage */
 
-// import shaderWaveformUrl from '@/waveformVisualizer.wgsl?raw';
+// import shaderComputeWaveformUrl from '@/shaderComputeWaveform.wgsl?raw';
 
 class WaveformVisualizer {
     static #instance = null;
@@ -196,7 +196,7 @@ class WaveformVisualizer {
         this.#waveformDataBuffer = null;
         this.#backgroundData = null;
         this.#backgroundDataBuffer = null;
-        this.#maskGroup = [0.25, 0.5, 0.75]; // demo loading state
+        this.#maskGroup = [0.0, 0.0, 0.0];
 
         const gpuContextManager = GpuContextManager.init();
         this.#context = gpuContextManager.configureCanvas(this.#canvas);
@@ -245,37 +245,6 @@ class WaveformVisualizer {
             });
             resizeObserver.observe(this.#canvas);
         })();
-
-        setInterval(() => {
-            // read current value of first mask index
-            let currentValue = this.maskGroup[0];
-
-            // add a small increment and wrap around 1.0
-            currentValue = (currentValue + 0.01) % 1.0;
-
-            // apply the updated value back to maskGroup
-            this.maskGroup = {index: 0, value: currentValue};
-        }, 16);
-        setInterval(() => {
-            // read current value of first mask index
-            let currentValue = this.maskGroup[1];
-
-            // add a small increment and wrap around 1.0
-            currentValue = (currentValue + 0.01) % 1.0;
-
-            // apply the updated value back to maskGroup
-            this.maskGroup = {index: 1, value: currentValue};
-        }, 16);
-                setInterval(() => {
-            // read current value of first mask index
-            let currentValue = this.maskGroup[2];
-
-            // add a small increment and wrap around 1.0
-            currentValue = (currentValue + 0.01) % 1.0;
-
-            // apply the updated value back to maskGroup
-            this.maskGroup = {index: 2, value: currentValue};
-        }, 16);
     }
 
     get maskGroup() {
