@@ -235,8 +235,7 @@ class WaveformVisualizer {
             this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./binaries/peak.bin');
 
             await this.#setupPipeline();
-            this.updateParamsBuffer();
-
+            this.#writeParamsBuffer();
             this.#resizeTextures();
             this.#setupBindGroups();
             this.#renderLoop();
@@ -260,7 +259,25 @@ class WaveformVisualizer {
             throw new Error(`Value must be between 0 and 1`);
         }
         this.#groupMask[index] = value;
-        this.updateParamsBuffer();
+        this.#writeParamsBuffer();
+    }
+
+    #writeParamsBuffer() {
+        if (!this.#gpuDevice || !this.#paramsBuffer) return;
+
+        const paramsData = new Float32Array([
+            this.#firstChannelPeak,
+            this.#boost,
+            this.#offset,
+            this.#channelCount,
+            this.#canvas.width,
+            this.#canvas.height,
+            this.#groupMask[0],
+            this.#groupMask[1],
+            this.#groupMask[2],
+            0.0 // padding
+        ]);
+        this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
     }
 
     /**
@@ -292,19 +309,7 @@ class WaveformVisualizer {
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
         });
 
-        const paramsData = new Float32Array([
-            this.#firstChannelPeak,
-            this.#boost,
-            this.#offset,
-            this.#channelCount,
-            this.#canvas.width,
-            this.#canvas.height,
-            this.#groupMask[0],
-            this.#groupMask[1],
-            this.#groupMask[2],
-            0.0 // padding
-        ]);
-        this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
+        this.#writeParamsBuffer();
 
         const {offsets, heights} = WaveformVisualizer.computeChannelLayout(this.#canvas.height, this.#channelCount);
         const vec4sPerArray = 16;
@@ -339,25 +344,12 @@ class WaveformVisualizer {
 
         this.#firstChannelPeak = Math.max(...this.#waveformData.filter((_, i) => i % this.#channelCount === 0));
 
-        const paramsData = new Float32Array([
-            this.#firstChannelPeak,
-            this.#boost,
-            this.#offset,
-            this.#channelCount,
-            this.#canvas.width,
-            this.#canvas.height,
-            this.#groupMask[0],
-            this.#groupMask[1],
-            this.#groupMask[2],
-            0.0 // padding
-        ]);
-
         // Create a uniform buffer for Params
         this.#paramsBuffer = this.#gpuDevice.createBuffer({
             size: 48,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
-        this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
+        this.#writeParamsBuffer();
 
         // Uniform buffer for firstChannelMax (1 float)
         const firstChannelMax = Math.max(...this.#waveformData.filter((_, i) => i % 16 === 0)); // channel 0
@@ -556,27 +548,6 @@ class WaveformVisualizer {
             requestAnimationFrame(frame);
         };
         requestAnimationFrame(frame);
-    }
-
-    /**
-     * Update uniform buffer for aspect ratio.
-     */
-    updateParamsBuffer() {
-        if (!this.#gpuDevice || !this.#paramsBuffer) return;
-        const paramsData = new Float32Array(
-            [
-                this.#firstChannelPeak,
-                this.#boost,
-                this.#offset,
-                this.#channelCount,
-                this.#canvas.width,
-                this.#canvas.height,
-                this.#groupMask[0],
-                this.#groupMask[1],
-                this.#groupMask[2],
-                0.0 // padding
-            ]);
-        this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData.buffer, paramsData.byteOffset, paramsData.byteLength);
     }
 }
 
