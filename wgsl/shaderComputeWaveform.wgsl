@@ -7,6 +7,7 @@ struct Params {
     canvasHeight: f32,
 };
 
+// We need to correct for rounding errors
 struct ChannelLayout {
     // 64 channels packed into 16 vec4s (16-byte aligned)
     channelOffset: array<vec4<f32>, 16>,
@@ -53,7 +54,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let localY_pixel = y - channelOffset;
     let samplesPerChannel = arrayLength(&waveform) / channelCount;
 
-    // Compute sample range for this pixel
+    // Compute sample range for this pixel (we need to iterate over them, in order to retain full quality)
     let samplesPerPixel = f32(samplesPerChannel) / f32(canvasWidth);
     let startSample = u32(floor(f32(gid.x) * samplesPerPixel));
     let endSample = u32(floor(f32(gid.x + 1u) * samplesPerPixel));
@@ -69,12 +70,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
 
-    // Get peak value for color/brightness
+    // Get peak value for brightness
     let waveformIndex = startSample * channelCount + channelIndex;
     let rawPeakValue = peaks[waveformIndex];
     let peakValue = (rawPeakValue / params.firstChannelPeak) * params.boost + params.offset;
 
-    // Compute stripe for waveform
+    // Compute waveform and center line for each channel
     let lineCenter_pixel = channelHeight / 2.0;
     let halfHeight_pixel = maxValue * 0.5 * channelHeight;
     let y_down = lineCenter_pixel - halfHeight_pixel;
