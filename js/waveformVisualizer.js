@@ -289,18 +289,16 @@ class WaveformVisualizer {
         this.#gpuDevice.queue.writeBuffer(this.#paramsBuffer, 0, paramsData);
 
         const {offsets, heights} = WaveformVisualizer.computeChannelLayout(this.#canvas.height, this.#channelCount);
-        const layoutData = new Float32Array(4 * 4 * 2); // 4 vec4s for offsets + 4 vec4s for heights
-        // Fill offsets vec4s
+        const vec4sPerArray = 16;
+        const layoutData = new Float32Array(vec4sPerArray * 4 * 2); // offsets + heights
         for (let i = 0; i < this.#channelCount; i++) {
-            const group = Math.floor(i / 4);
-            const sub = i % 4;
-            layoutData[group * 4 + sub] = offsets[i];  // vec4 group i
-        }
-        // Fill heights vec4s
-        for (let i = 0; i < this.#channelCount; i++) {
-            const group = Math.floor(i / 4);
-            const sub = i % 4;
-            layoutData[16 + group * 4 + sub] = heights[i]; // start heights at index 16
+            const group = Math.floor(i / 4); // vec4 index
+            const sub = i % 4;               // component within vec4
+            const offsetBase = group * 4;    // vec4 index * 4 floats
+            const heightBase = vec4sPerArray * 4 + group * 4;
+
+            layoutData[offsetBase + sub] = offsets[i];  // x/y/z/w depends on sub
+            layoutData[heightBase + sub] = heights[i];
         }
 
         this.#channelLayoutBuffer = this.#gpuDevice.createBuffer({
@@ -349,18 +347,16 @@ class WaveformVisualizer {
         this.#gpuDevice.queue.writeBuffer(this.#firstChannelMaximumBuffer, 0, firstChannelMaxValue);
 
         const {offsets, heights} = WaveformVisualizer.computeChannelLayout(this.#canvas.height, this.#channelCount);
-        const layoutData = new Float32Array(4 * 4 * 2); // 4 vec4s for offsets + 4 vec4s for heights
-        // Fill offsets vec4s
+        const vec4sPerArray = 16;
+        const layoutData = new Float32Array(vec4sPerArray * 4 * 2); // offsets + heights
         for (let i = 0; i < this.#channelCount; i++) {
-            const group = Math.floor(i / 4);
-            const sub = i % 4;
-            layoutData[group * 4 + sub] = offsets[i];  // vec4 group i
-        }
-        // Fill heights vec4s
-        for (let i = 0; i < this.#channelCount; i++) {
-            const group = Math.floor(i / 4);
-            const sub = i % 4;
-            layoutData[16 + group * 4 + sub] = heights[i]; // start heights at index 16
+            const group = Math.floor(i / 4); // vec4 index
+            const sub = i % 4;               // component within vec4
+            const offsetBase = group * 4;    // vec4 index * 4 floats
+            const heightBase = vec4sPerArray * 4 + group * 4;
+
+            layoutData[offsetBase + sub] = offsets[i];  // x/y/z/w depends on sub
+            layoutData[heightBase + sub] = heights[i];
         }
 
         this.#channelLayoutBuffer = this.#gpuDevice.createBuffer({

@@ -8,9 +8,9 @@ struct Params {
 };
 
 struct ChannelLayout {
-    // 16 channels packed into 4 vec4s (16-byte aligned)
-    channelOffset: array<vec4<f32>, 4>,
-    channelHeight: array<vec4<f32>, 4>,
+    // 64 channels packed into 16 vec4s (16-byte aligned)
+    channelOffset: array<vec4<f32>, 16>,
+    channelHeight: array<vec4<f32>, 16>,
 };
 
 @group(0) @binding(0) var<storage, read> waveform: array<f32>;
