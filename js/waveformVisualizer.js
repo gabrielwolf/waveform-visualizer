@@ -299,12 +299,15 @@ class WaveformVisualizer {
         return this.#maskGroup;
     }
 
+    /* right now we a bound to a maximum of third order ambisonics (for obvious reasons: bandwidth cost vs. quality)*/
     set maskGroup({index, value}) {
-        if (isNaN(index) || index < 0 || index > 2) {
-            throw new Error(`Index must be 0, 1, or 2`);
+        // Ensure index is exactly 0, 1, or 2
+        if (typeof index !== 'number' || !Number.isInteger(index) || ![0, 1, 2].includes(index)) {
+            throw new Error(`Index must be one of 0, 1, or 2 (got ${index})`);
         }
-        if (isNaN(value) || value < 0 || value > 1) {
-            throw new Error(`Value must be between 0 and 1`);
+        // Ensure value is numeric and between 0 and 1 inclusive
+        if (typeof value !== 'number' || Number.isNaN(value) || value < 0 || value > 1) {
+            throw new Error(`Value must be a number between 0 and 1 (got ${value})`);
         }
         this.#maskGroup[index] = value;
         this.#writeParamsBuffer();
