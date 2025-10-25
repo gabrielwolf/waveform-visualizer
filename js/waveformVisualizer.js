@@ -23,7 +23,7 @@ class WaveformVisualizer {
     static #shaderComputeWaveformCodeUrl = '../wgsl/shaderComputeWaveform.wgsl';
     static #metaDataUrl = '../binaries/waveform.json';
     static #waveformDataMeanUrl = '../binaries/mean.bin';
-    static #backgroundDataPeakUrl ='./binaries/peak.bin';
+    static #backgroundDataPeakUrl = './binaries/peak.bin';
 
     /** @type {number | null} On HiDpi monitors 2 or 3, like Apple Retina displays */
     #devicePixelRatio;
