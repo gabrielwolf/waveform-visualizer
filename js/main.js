@@ -1,5 +1,5 @@
-import WaveformVisualizer from "./waveformVisualizer.js";
 import GpuContextManager from "./gpuContextManager.js";
+import WaveformVisualizer from "./waveformVisualizer.js";
 
 const gpuContextManager = GpuContextManager.init();
 await gpuContextManager.configureDevice();
