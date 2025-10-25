@@ -206,7 +206,7 @@ class WaveformVisualizer {
     }
 
     /**
-     * Constructs the DummyHead renderer and initializes Babylon.js scene.
+     * Constructs the waveform visualizer.
      * @param {Document | HTMLElement} [root=document] - DOM root to look for the canvas.
      * @throws {Error} If canvas element is not found.
      */
