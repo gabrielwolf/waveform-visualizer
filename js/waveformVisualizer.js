@@ -15,11 +15,15 @@ import GpuContextManager from "./gpuContextManager.js";
 
 /** @typedef {import('webgpu-types').GPUBufferUsage} GPUBufferUsage */
 
-// do it like this with vitejs
+// do it like this if using ViteJS (replace the static variable with import)
 // import shaderComputeWaveformUrl from '@/shaderComputeWaveform.wgsl?raw';
 
 class WaveformVisualizer {
     static #instance = null;
+    static #shaderComputeWaveformCodeUrl = '../wgsl/shaderComputeWaveform.wgsl';
+    static #metaDataUrl = '../binaries/waveform.json';
+    static #waveformDataMeanUrl = '../binaries/mean.bin';
+    static #backgroundDataPeakUrl ='./binaries/peak.bin';
 
     /** @type {number | null} On HiDpi monitors 2 or 3, like Apple Retina displays */
     #devicePixelRatio;
@@ -268,13 +272,12 @@ class WaveformVisualizer {
         }
 
         (async () => {
-            this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader('../wgsl/shaderComputeWaveform.wgsl');
-
+            this.#shaderComputeWaveformCode = await WaveformVisualizer.loadShader(WaveformVisualizer.#shaderComputeWaveformCodeUrl);
             // Layout of the json: {input_file: 'input.caf', channel_count: 4, sample_count: 11811656, image_width: 4096}
-            this.#metaData = await WaveformVisualizer.loadMeta('../binaries/waveform.json');
+            this.#metaData = await WaveformVisualizer.loadMeta(WaveformVisualizer.#metaDataUrl);
             this.#channelCount = this.#metaData.channel_count;
-            this.#waveformData = await WaveformVisualizer.loadBinaryFile('../binaries/mean.bin');
-            this.#backgroundData = await WaveformVisualizer.loadBinaryFile('./binaries/peak.bin');
+            this.#waveformData = await WaveformVisualizer.loadBinaryFile(WaveformVisualizer.#waveformDataMeanUrl);
+            this.#backgroundData = await WaveformVisualizer.loadBinaryFile(WaveformVisualizer.#backgroundDataPeakUrl);
 
             await this.#setupPipeline();
             this.#writeParamsBuffer();
