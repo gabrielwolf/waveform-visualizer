@@ -195,12 +195,11 @@ class WaveformVisualizer {
      * If already initialized, returns the existing instance.
      *
      * @param {HTMLCanvasElement|null} canvasElement - The canvas element to render onto.
-     * @param {GpuContextManager} gpuDevice - WebGPU device used for rendering.
      * @returns {WaveformVisualizer} The singleton instance.
      */
-    static init(canvasElement = null, gpuDevice = null) {
+    static init(canvasElement = null) {
         if (!WaveformVisualizer.#instance) {
-            WaveformVisualizer.#instance = new WaveformVisualizer(canvasElement, gpuDevice);
+            WaveformVisualizer.#instance = new WaveformVisualizer(canvasElement);
             console.log("WaveformVisualizer initialized");
         }
         return WaveformVisualizer.#instance;
