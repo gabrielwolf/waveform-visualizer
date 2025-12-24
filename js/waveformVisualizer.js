@@ -649,7 +649,7 @@ class WaveformVisualizer {
         this.#orchestrator.register({
             id,
             // Event-driven; cap high so we are not the limiter when dirty.
-            preferredHz: 120,
+            preferredHz: 60,
             wantsFrame: () => !!this.#needsRender,
             encode: (encoder) => {
                 if (this.#disposed) return;
