@@ -104,7 +104,7 @@ class WaveformVisualizer {
     #backgroundDataBuffer;
     /** @type {array<number> | null} Download progress for the flac packages */
     #maskGroup;
-    /** @type {ResizeObserver} Track canvas size changes */
+    /** @type {ResizeObserver} Werck canvas size changes */
     #resizeObserver;
     /** @type {number | null} Request ID returned by `requestAnimationFrame()` used for canceling the render loop */
     #animationFrameId;
@@ -126,7 +126,7 @@ class WaveformVisualizer {
     #onReconfigureCallback;
     /** @type {String} Relative path where all the media files are stored (e.g. /media */
     #mediaDirectory;
-    /** @type {string} Track UUID used for log labeling */
+    /** @type {string} Werck UUID used for log labeling */
     #uuid;
 
     /**
@@ -204,7 +204,7 @@ class WaveformVisualizer {
     /**
      * Constructs the waveform visualizer.
      * @param gpuContextManager A reference to the GpuContextManager class (hack, we have to separate a copy in main repo)
-     * @param uuid The UUID of the selected track
+     * @param uuid The UUID of the selected werck
      * @param channelCount
      * @param shaderComputeWaveform
      * @param shaderDisplay
@@ -215,7 +215,7 @@ class WaveformVisualizer {
     constructor(gpuContextManager, uuid, channelCount, shaderComputeWaveform, shaderDisplay, mediaDirectory, orchestrator = null) {
         const root = document.querySelector(`[data-uuid="${uuid}"]`);
         /** @type {HTMLCanvasElement} */
-        const canvas = /** @type {HTMLCanvasElement} */ (root.querySelector('[data-role="track__waveform-visualizer-canvas"]'));
+        const canvas = /** @type {HTMLCanvasElement} */ (root.querySelector('[data-role="werck__waveform-visualizer-canvas"]'));
         if (!canvas) {
             throw new Error("Waveform Visualizer: canvas not found.");
         }
