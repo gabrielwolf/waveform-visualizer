@@ -103,10 +103,6 @@ class GpuContextManager {
             console.log(`HDR/SDR change detected, dynamicRange: ${dynamicRange}`);
 
             if (this.#context) {
-                for (const callback of this.#listeners) {
-                    callback(this.#context);
-                }
-
                 // Re-detect best canvas configuration
                 const {format, colorSpace} = this.#detectBestCanvasConfiguration(this.#context.device);
                 this.#context.format = format;
@@ -132,6 +128,10 @@ class GpuContextManager {
                         let identifier = canvas.dataset?.role || canvas.id || canvas.className || "<unnamed canvas>";
                         console.warn(`Reconfigure failed after HDR/SDR switch for canvas [${identifier}]:`, error);
                     }
+                }
+
+                for (const callback of this.#listeners) {
+                    callback(this.#context);
                 }
             }
         });
